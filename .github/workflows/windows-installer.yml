@@ -1,26 +1,26 @@
-name: Windows installer
 
-# Builds ONE Windows installer (a single NSIS .exe) on a real Windows runner and attaches it as a downloadable
-# artifact. Run it from the Actions tab ("Run workflow"), or push a tag like v0.11.0 to also attach the installer to a
-# GitHub Release. The installer is UNSIGNED unless you add a code-signing certificate yourself (see RELEASING.md):
-# Windows SmartScreen will show "Windows protected your PC" - choose "More info" > "Run anyway".
+name: Windows installer
 
 on:
   workflow_dispatch:
   push:
-    tags: ['v*']
+    tags:
+      - 'v*'
 
 permissions:
-  contents: write # only used to attach the installer to a Release when a tag is pushed
+  contents: write
 
 jobs:
   installer:
     runs-on: windows-latest
     timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -30,28 +30,31 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Fetch the Electron binary (pnpm skips install scripts)
+      - name: Fetch Electron binary
         run: npx install-electron
 
-      # Typecheck, lint and tests run on Linux in ci.yml (that is where they were validated); this workflow only builds.
-
-      - name: Build the installer
+      - name: Build Windows installer
         run: pnpm --filter @nova/desktop run dist:win
 
-      - name: Show what was built
+      - name: Verify installer
         shell: pwsh
-        run: Get-ChildItem apps/desktop/dist-installer -Filter *.exe | Select-Object Name, Length
+        run: |
+          $files = Get-ChildItem "apps/desktop/dist-installer" -Filter "*.exe"
+          if (-not $files) {
+            throw "Installer EXE was not created."
+          }
+          $files | Select-Object Name, Length
 
-      - name: Upload the single installer
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
           name: Nova-Player-Setup
-          path: apps/desktop/dist-installer/Nova Player Setup *.exe
+          path: apps/desktop/dist-installer/*.exe
           if-no-files-found: error
           retention-days: 30
 
-      - name: Attach to the GitHub Release (tag builds only)
+      - name: Attach installer to GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: apps/desktop/dist-installer/Nova Player Setup *.exe
+          files: apps/desktop/dist-installer/*.exe
