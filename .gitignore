@@ -1,0 +1,14 @@
+node_modules
+dist
+dist-ts
+dist-installer
+out
+.vite
+*.tsbuildinfo
+*.log
+.DS_Store
+test-results
+playwright-report
+
+# Scratch folder created (and removed) by the Electron-runtime SQLite test
+.electron-check-*/

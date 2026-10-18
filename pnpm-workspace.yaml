@@ -1,0 +1,32 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# pnpm 12 ignores install/postinstall/preinstall lifecycle scripts by
+# default (a real, current security default hit during Phase 0 - see the
+# completion report). Each entry below was reviewed individually rather
+# than blanket-approved, per objective L:
+#   - esbuild: downloads its own small, well-audited platform-specific
+#     binary; vite/vitest's dev-server and bundling performance depend on
+#     it. Approved.
+#   - electron-winstaller: only used for the Squirrel.Windows installer
+#     target. This project's electron-builder config uses NSIS only (see
+#     apps/desktop/electron-builder.yml) and never invokes Squirrel, so
+#     this package's native build step is unneeded overhead and attack
+#     surface. Deliberately NOT approved.
+#   - better-sqlite3: DENIED, and this is an important correction to the
+#     technology-validation spike's conclusion. Approving this package's
+#     build made pnpm attempt an actual `node-gyp rebuild` (its bundled
+#     binding.gyp is used as a build trigger despite "gypfile": false in
+#     its package.json), which fails in this sandbox with no working
+#     node-gyp/Python toolchain. This did NOT happen under a plain `npm
+#     install` in the earlier spike - npm and pnpm handle this package's
+#     implicit-build heuristic differently. The correct fix is to DENY the
+#     build entirely: the prebuilt N-API binary already ships as a normal
+#     package file (prebuilds/*.node) and loads correctly with no compile
+#     step, exactly as the original spike proved - the fix is to stop pnpm
+#     from attempting to rebuild it, not to let the rebuild "succeed".
+allowBuilds:
+  esbuild: true
+  electron-winstaller: false
+  better-sqlite3: false
