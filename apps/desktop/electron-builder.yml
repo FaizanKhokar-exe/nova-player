@@ -1,0 +1,90 @@
+appId: com.novaplayer.desktop
+productName: Nova Player
+directories:
+  output: dist-installer
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+  # Phase 9: pnpm lists the @nova/* workspace packages and the UI libraries as dependencies of this
+  # package, so electron-builder would copy them into the asar - including the compiled test files
+  # and source maps in each package's `dist/`. None of it is used at runtime: electron-vite has
+  # already bundled all of it into out/main, out/preload and out/renderer (only electron,
+  # better-sqlite3 and music-metadata stay external - see electron.vite.config.ts).
+  - "!node_modules/@nova/**"
+  - "!node_modules/react/**"
+  - "!node_modules/react-dom/**"
+  - "!node_modules/scheduler/**"
+  - "!node_modules/zustand/**"
+  - "!node_modules/@tanstack/**"
+  # better-sqlite3 loads its prebuilt prebuilds/<platform>-<arch>.node; its SQLite/C++ sources are
+  # only for a from-source build, which this project never does (see npmRebuild below).
+  - "!node_modules/better-sqlite3/deps/**"
+  - "!node_modules/better-sqlite3/src/**"
+  - "!**/*.map"
+
+# Phase 9: do NOT let electron-builder rebuild native modules. better-sqlite3 13 ships
+# prebuilt N-API binaries for every platform it supports (including win32-x64) inside
+# its own package (`prebuilds/`), and its package.json sets `gypfile: false`. A rebuild
+# would download Electron headers and need a C++ toolchain (Visual Studio Build Tools on
+# Windows) for no benefit, and it fails outright where that is unavailable.
+npmRebuild: false
+
+# better-sqlite3 ships a native .node addon (a prebuilt N-API binary - see
+# the technology validation, item B). A native addon cannot be dlopen'd from
+# inside an asar archive, so its files must be unpacked onto disk as part of
+# packaging. This is the one packaging-specific step better-sqlite3 needs;
+# it requires no rebuild step of its own.
+asarUnpack:
+  - node_modules/better-sqlite3/**
+
+# Phase 7: the tray and window icons are real files shipped with the app. `resourcePath()` in
+# src/main/shell/electron-shell.ts reads them from process.resourcesPath when packaged.
+extraResources:
+  - from: resources
+    to: .
+
+win:
+  icon: resources/icon.png
+  target:
+    - target: nsis
+      arch:
+        - x64
+  # Signing is entirely opt-in via environment variables. electron-builder
+  # only attempts to sign when these are present, so a local/CI build with
+  # no certificate configured produces a valid, working, UNSIGNED build by
+  # default - not a broken one. Nothing else in this config needs to change
+  # the day a real certificate or Azure Trusted Signing account exists.
+  #
+  # Traditional certificate path (reads from env if set):
+  #   CSC_LINK              - path or URL to a .pfx/.p12 file
+  #   CSC_KEY_PASSWORD       - its password
+  #
+  # Azure Trusted Signing path (electron-builder reads azureSignOptions from
+  # env when configured this way - left commented until an account exists):
+  # azureSignOptions:
+  #   publisherName: "Nova Player"
+  #   endpoint: "https://<region>.codesigning.azure.net"
+  #   codeSigningAccountName: "<account>"
+  #   certificateProfileName: "<profile>"
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  # Explicit (these are also electron-builder's defaults): uninstalling removes the app, not the
+  # user's library database or settings under %APPDATA%.
+  deleteAppDataOnUninstall: false
+
+# Explicitly no publish provider. Without this, electron-builder 26.15.3 tries to generate an
+# update-info file (latest.yml) from the git repository, finds none, and crashes AFTER the
+# installer is written ("Cannot read properties of null (reading 'provider')").
+publish: null
+
+# Deliberately absent: no publish provider. Per product decision 4, this
+# project does not ship a placeholder or permanently-failing update feed.
+# Auto-update is not implemented: `electron-updater` is NOT a dependency and
+# nothing in the main process checks for updates, so there is intentionally
+# nothing here for electron-builder to publish to.

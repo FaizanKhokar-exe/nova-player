@@ -1,0 +1,22 @@
+{
+  "name": "@nova/infrastructure",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -b tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@nova/domain": "workspace:*",
+    "@nova/shared": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "music-metadata": "11.16.1"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "9.6.0",
+    "electron": "44.4.5"
+  }
+}

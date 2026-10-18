@@ -1,0 +1,38 @@
+{
+  "name": "@nova/desktop",
+  "version": "0.11.0",
+  "productName": "Nova Player",
+  "description": "Nova Player - a local-first desktop music player for your own music files.",
+  "author": "Nova Player",
+  "private": true,
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "build:unpack": "electron-vite build && electron-builder --dir",
+    "dist:win": "electron-vite build && electron-builder --win nsis --x64",
+    "typecheck": "tsc -b tsconfig.json",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@electron-toolkit/utils": "^4.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^5.2.0",
+    "electron": "44.4.5",
+    "electron-builder": "26.15.3",
+    "electron-vite": "5.0.0",
+    "vite": "^7.3.6"
+  },
+  "dependencies": {
+    "@nova/domain": "workspace:*",
+    "@nova/infrastructure": "workspace:*",
+    "@nova/shared": "workspace:*",
+    "@nova/ui": "workspace:*",
+    "better-sqlite3": "13.0.3",
+    "music-metadata": "11.16.1",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  }
+}
