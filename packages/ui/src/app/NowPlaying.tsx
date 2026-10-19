@@ -6,7 +6,7 @@ import { usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { Icon, type IconName } from '../theme/Icon.js';
 import { ParticleField } from '../visuals/ParticleField.js';
 import { Spectrum } from '../visuals/Spectrum.js';
-import { Lyrics } from './Lyrics.js';
+import { Lyrics, LyricsBadge } from './Lyrics.js';
 import { SeekBar } from './SeekBar.js';
 import { usePrefs, useServices, useUi } from './services.js';
 import type { NowPlayingLayout } from './ui-store.js';
@@ -106,6 +106,7 @@ function NowPlayingLayer() {
         <div className="nx-np-left">
           <div className="nx-np-cover" data-testid="np-cover">
             <Artwork size="100%" title={track?.title} seed={track?.album ?? track?.title} />
+            <LyricsBadge />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
             <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>

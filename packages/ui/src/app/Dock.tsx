@@ -36,7 +36,12 @@ export function Dock() {
   };
 
   return (
-    <footer className="nx-dock" aria-label="Player" data-testid="player-bar" data-state={error !== undefined ? 'error' : track === undefined ? 'empty' : playing ? 'playing' : 'paused'}>
+    <footer className="nx-dock" aria-label="Player" data-testid="player-bar" data-state={error !== undefined ? 'error' : track === undefined ? 'empty' : playing ? 'playing' : 'paused'} data-expandable={track !== undefined} onClick={(event) => {
+      // Clicking the bar itself (not one of its controls) opens Now Playing.
+      if (track === undefined || (event.target as HTMLElement).closest('button, input, a, [role="slider"], .nx-dock-error') !== null) return;
+      audioControls.getState().activateEngine();
+      ui.getState().openNowPlaying('full');
+    }}>
       {error !== undefined && (
         <div className="nx-dock-error" role="alert" data-testid="player-error">
           <Icon name="close" size={16} />
@@ -66,19 +71,19 @@ export function Dock() {
 
       <div className="nx-dock-center">
         <div className="nx-dock-controls">
-          <button type="button" className="nx-icon-btn" aria-label="Shuffle" aria-pressed={shuffle} data-testid="player-shuffle" onClick={() => void act.setShuffle(!shuffle)}>
+          <button type="button" className="nx-icon-btn" aria-label="Shuffle" data-keys="S" aria-pressed={shuffle} data-testid="player-shuffle" onClick={() => void act.setShuffle(!shuffle)}>
             <Icon name="shuffle" size={19} />
           </button>
-          <button type="button" className="nx-icon-btn" aria-label="Previous" data-testid="player-previous" disabled={track === undefined} onClick={() => void act.previous()}>
+          <button type="button" className="nx-icon-btn" aria-label="Previous" data-keys="Ctrl+←" data-testid="player-previous" disabled={track === undefined} onClick={() => void act.previous()}>
             <Icon name="prev" size={22} />
           </button>
-          <button type="button" className="nx-play" aria-label={playing ? 'Pause' : 'Play'} data-testid="player-play" disabled={track === undefined} onClick={() => act.togglePlay()}>
+          <button type="button" className="nx-play" aria-label={playing ? 'Pause' : 'Play'} data-keys="Space" data-testid="player-play" disabled={track === undefined} onClick={() => act.togglePlay()}>
             <Icon name={playing ? 'pause' : 'play'} size={22} />
           </button>
-          <button type="button" className="nx-icon-btn" aria-label="Next" data-testid="player-next" disabled={track === undefined || !canNext} onClick={() => void act.next()}>
+          <button type="button" className="nx-icon-btn" aria-label="Next" data-keys="Ctrl+→" data-testid="player-next" disabled={track === undefined || !canNext} onClick={() => void act.next()}>
             <Icon name="next" size={22} />
           </button>
-          <button type="button" className="nx-icon-btn" aria-label={`Repeat: ${repeat}`} aria-pressed={repeat !== 'off'} data-testid="player-repeat" onClick={() => void act.cycleRepeatMode()}>
+          <button type="button" className="nx-icon-btn" aria-label={`Repeat: ${repeat}`} data-keys="R" aria-pressed={repeat !== 'off'} data-testid="player-repeat" onClick={() => void act.cycleRepeatMode()}>
             <Icon name={repeat === 'one' ? 'repeatOne' : 'repeat'} size={19} />
           </button>
         </div>
@@ -91,7 +96,7 @@ export function Dock() {
             <Spectrum style={visualizer === 'ring' ? 'bars' : visualizer} bars={16} />
           </div>
         )}
-        <button type="button" className="nx-icon-btn" aria-label="Lyrics" data-testid="player-lyrics" disabled={track === undefined} onClick={() => ui.getState().openNowPlaying('lyrics')}>
+        <button type="button" className="nx-icon-btn" aria-label="Lyrics" data-keys="L" data-testid="player-lyrics" disabled={track === undefined} onClick={() => ui.getState().openNowPlaying('lyrics')}>
           <Icon name="lyrics" size={19} />
         </button>
         <button ref={speedButton} type="button" className="nx-icon-btn" aria-label={`Playback speed ${speed}×`} data-active={speed !== 1} data-testid="player-speed" onClick={() => ui.getState().openPopover({ kind: 'speed', anchor: anchorOf(speedButton.current) })}>
@@ -100,16 +105,16 @@ export function Dock() {
         <button ref={sleepButton} type="button" className="nx-icon-btn" aria-label="Sleep timer" data-active={sleep.mode !== 'off'} data-testid="player-sleep" onClick={() => ui.getState().openPopover({ kind: 'sleep', anchor: anchorOf(sleepButton.current) })}>
           <Icon name="timer" size={19} />
         </button>
-        <button type="button" className="nx-icon-btn" aria-label="Queue" aria-pressed={queueOpen} data-testid="player-queue" onClick={() => act.setQueueOpen(!queueOpen)}>
+        <button type="button" className="nx-icon-btn" aria-label="Queue" data-keys="Q" aria-pressed={queueOpen} data-testid="player-queue" onClick={() => act.setQueueOpen(!queueOpen)}>
           <Icon name="queue" size={19} />
         </button>
-        <button type="button" className="nx-icon-btn" aria-label={muted ? 'Unmute' : 'Mute'} aria-pressed={muted} data-testid="player-mute" onClick={() => act.toggleMute()}>
+        <button type="button" className="nx-icon-btn" aria-label={muted ? 'Unmute' : 'Mute'} data-keys="M" aria-pressed={muted} data-testid="player-mute" onClick={() => act.toggleMute()}>
           <Icon name={muted || volume === 0 ? 'mute' : 'volume'} size={19} />
         </button>
         <input
           type="range"
           className="nx-range nx-volume"
-          aria-label="Volume"
+          aria-label="Volume" data-keys="↑ / ↓"
           data-testid="player-volume"
           min={0}
           max={100}

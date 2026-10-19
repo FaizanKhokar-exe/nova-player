@@ -70,7 +70,6 @@ const Row = memo(function Row(p: RowProps) {
       draggable={p.draggable}
       style={p.dropEdge === undefined ? undefined : { boxShadow: p.dropEdge === 'before' ? 'inset 0 2px 0 var(--accent-primary)' : 'inset 0 -2px 0 var(--accent-primary)' }}
       onClick={(event) => p.onClick(p.index, event)}
-      onDoubleClick={() => p.onPlay(p.index)}
       onContextMenu={(event) => {
         event.preventDefault();
         p.onMenu(p.index, event.clientX, event.clientY);
@@ -220,9 +219,10 @@ export function TrackList({ tracks, context, sort, playlist, onPlayRow, label, s
       } else {
         setSelection(new Set([index]));
         anchor.current = index;
+        play(index);
       }
     },
-    [],
+    [play],
   );
 
   const toggleFavorite = useCallback((trackId: string) => void services.collections.getState().toggleFavorite(trackId), [services.collections]);

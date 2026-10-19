@@ -45,7 +45,7 @@ export function Sidebar() {
   };
 
   const renderItem = (item: Item) => (
-    <button key={routeKey(item.route)} type="button" className="nx-nav-item" aria-current={isActive(item.route) ? 'page' : undefined} aria-label={item.label} title={collapsed ? item.label : undefined} data-testid={`nav-${item.route.name}`} onClick={() => ui.getState().navigate(item.route)}>
+    <button key={routeKey(item.route)} type="button" className="nx-nav-item" aria-current={isActive(item.route) ? 'page' : undefined} aria-label={item.label} data-tip={collapsed ? item.label : undefined} data-testid={`nav-${item.route.name}`} onClick={() => ui.getState().navigate(item.route)}>
       <Icon name={item.icon} size={20} />
       <span className="nx-nav-text">{item.label}</span>
       {item.count !== undefined && <span className="nx-nav-count" data-testid={`nav-${item.route.name}-count`}>{item.count.toLocaleString('en-US')}</span>}
@@ -89,12 +89,12 @@ export function Sidebar() {
             <span className="nx-faint" style={{ fontSize: 12 }}>{progress === undefined ? 'Starting scan…' : `Scanning… ${plural(progress.processed, 'file')}`}</span>
           </div>
         )}
-        <div className="nx-side-extra" style={{ display: 'flex', gap: 8, padding: '0 4px' }}>
-          <button type="button" className="nx-btn nx-btn--small" style={{ flex: 1 }} disabled={rootBusy} data-testid="add-folder" onClick={() => void library.getState().addRoot()}>
-            <Icon name="folder" size={15} /> Add folder
+        <div className="nx-side-actions">
+          <button type="button" className="nx-btn nx-btn--small" aria-label="Add folder" disabled={rootBusy} data-testid="add-folder" onClick={() => void library.getState().addRoot()}>
+            <Icon name="folder" size={16} /> <span className="nx-btn-text">Add folder</span>
           </button>
           <button type="button" className="nx-btn nx-btn--small" disabled={rootCount === 0 || scanPhase !== 'idle'} data-testid="scan-all" aria-label="Scan library" onClick={() => void library.getState().startScan()}>
-            <Icon name="refresh" size={15} /> Scan
+            <Icon name="refresh" size={16} /> <span className="nx-btn-text">Scan</span>
           </button>
         </div>
         <button type="button" className="nx-nav-item" aria-current={route.name === 'settings' ? 'page' : undefined} aria-label="Settings" data-testid="nav-settings" onClick={() => ui.getState().navigate({ name: 'settings' })}>

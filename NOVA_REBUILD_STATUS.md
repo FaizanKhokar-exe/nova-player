@@ -971,3 +971,26 @@ analyser data (`data-live="true"`; the 440 Hz test tone shows as a peak in scree
 **Not verified (be honest):** audible output (no sound device); the installer has **not** been run on real Windows and is
 **unsigned**; Web Audio/Spectrum behaviour on real Windows audio devices; performance on low-end hardware (the Performance
 setting and frame governor exist but were not benchmarked on slow machines).
+
+## Phase 12 — first real-Windows feedback batch (v0.11.1)
+
+The user installed 0.11.0 on a real Windows PC and reported the first batch. Changes:
+- **Layout bugs (root causes):** sidebar and Home pages were flex columns whose children could shrink, so the sidebar footer
+  overlapped "PLAYLISTS" and Home sections squashed into each other (tiles overlapping). Children are now `flex: none` and the
+  playlist list scrolls. `scrollbar-width: thin` on `.nx-shelf` overrode the styled `::-webkit-scrollbar` (white native bar): removed;
+  scrollbars are now thin accent-tinted pills. Collapsed sidebar: uniform 44 px icon buttons, icon-only footer actions, tooltips.
+- **Interaction:** a single click on a song row plays it (Ctrl/Shift-click still select; heart/⋯ unaffected; double-click handler removed).
+  The player bar is tinted from the cover accent and clicking its empty area opens Now Playing. The "using the .lrc you attached / remove"
+  control is now a tiny badge on the cover (`LyricsBadge`).
+- **Tooltips:** one delegated `Tooltips` layer shows the name (+ shortcut via `data-keys`) of every icon-only control on hover/keyboard focus.
+- **Window:** native menu removed (`Menu.setApplicationMenu(null)`, `removeMenu`, `autoHideMenuBar`). Fullscreen on double-click of empty
+  space and F / F11 uses the page's Fullscreen API; this needed ONE permission exception: `fullscreen` is now granted to our own page only
+  (all other permission requests are still refused; the hardening e2e for notifications/geolocation still passes). The pointer hides after 2.5 s
+  idle in Now Playing or fullscreen. Windows taskbar thumbnail buttons Previous / Play-Pause / Next (`thumbar.ts`, `thumb-*.png`) go through the
+  existing shell-command path; Windows-only and **not verifiable on Linux**.
+- **Keyboard:** `shortcuts.ts` (pure, unit-tested) adds seek (←/→, Shift = 15 s), volume (↑/↓), 0–9 jump, N/P, S, R, H (favourite), Q, F, [ ], Ctrl+, / ?;
+  the Settings list is generated from the same table.
+- **CI test fixed:** `library-application-hardening.test.ts` "keeps watching the REMAINING folders…" asserted the order of watched roots, which is
+  storage-defined and differed on GitHub's Linux runner; it now compares as sets (same intent: which folders are watched/closed, and that a failed removal starts nothing new).
+- New e2e (nova2.spec.ts): row click plays, dock click expands, no menu, tooltips, sidebar/Home no-overlap geometry (incl. collapsed + short window),
+  shortcuts, fullscreen + idle cursor.

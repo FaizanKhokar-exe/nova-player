@@ -1,3 +1,4 @@
+import { SHORTCUT_HELP } from '../shortcuts.js';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { EQ_BAND_LABELS, EQ_PRESETS, EQ_MAX_DB, EQ_MIN_DB, matchPreset } from '../../audio/eq-presets.js';
@@ -208,7 +209,7 @@ export function SettingsView() {
       <section className="nx-card" aria-labelledby="set-keys">
         <h2 className="nx-h2" id="set-keys">Keyboard shortcuts</h2>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px 28px' }}>
-          {[['Play / pause', 'Space'], ['Next / previous', 'Ctrl + → / ←'], ['Search', 'Ctrl + K'], ['Back / forward', 'Alt + ← / →'], ['Lyrics Mode', 'L'], ['Mute', 'M'], ['Close Now Playing', 'Esc']].map(([name, keys]) => (
+          {SHORTCUT_HELP.map(([name, keys]) => (
             <div key={name} className="nx-setting" style={{ minHeight: 28 }}><span className="nx-muted">{name}</span><kbd className="nx-kbd">{keys}</kbd></div>
           ))}
         </div>

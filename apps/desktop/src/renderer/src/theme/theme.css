@@ -110,9 +110,10 @@
 /* ------------------------------ base ------------------------------ */
 html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font-family: var(--font-body); font-size: 14px; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
 * { box-sizing: border-box; }
-::-webkit-scrollbar { width: 10px; height: 10px; }
-::-webkit-scrollbar-thumb { background: var(--surface-strong); border-radius: var(--r-pill); border: 3px solid transparent; background-clip: padding-box; }
-::-webkit-scrollbar-thumb:hover { background: var(--border-strong); background-clip: padding-box; border: 3px solid transparent; }
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(var(--accent-primary-rgb), 0.28); border-radius: var(--r-pill); border: 4px solid transparent; background-clip: padding-box; min-width: 40px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(var(--accent-primary-rgb), 0.6); background-clip: padding-box; border: 4px solid transparent; }
 ::-webkit-scrollbar-track { background: transparent; }
 button, input, select, textarea { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
@@ -263,8 +264,10 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 .nx-grid--artists .nx-tile-cover, .nx-grid--artists .nx-tile-cover .nx-cover { border-radius: 50%; }
 .nx-grid--artists .nx-tile-overlay { border-radius: 50%; }
 .nx-grid--artists .nx-tile-text { text-align: center; align-items: center; }
-.nx-shelf { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(168px, 190px); gap: 20px; overflow-x: auto; padding-bottom: 10px; margin: 0 -28px; padding-inline: 28px; scroll-snap-type: x proximity; scrollbar-width: thin; }
-.nx-shelf > * { scroll-snap-align: start; }
+.nx-shelf { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(168px, 190px); gap: 20px; overflow-x: auto; padding-bottom: 10px; margin: 0 -28px; padding-inline: 28px; scroll-snap-type: x proximity; align-items: start; }
+.nx-shelf > * { scroll-snap-align: start; min-width: 0; }
+.nx-shelf { padding-top: 4px; }
+.nx-page > * { flex: none; }
 .nx-tile { all: unset; box-sizing: border-box; display: flex; flex-direction: column; gap: 12px; padding: 12px; border-radius: var(--r-lg); cursor: pointer; background: transparent; transition: background 160ms var(--ease-out), transform 160ms var(--ease-out); position: relative; min-width: 0; }
 .nx-tile-wrap { position: relative; min-width: 0; }
 .nx-tile-wrap:hover .nx-tile { background: var(--surface); }
@@ -444,3 +447,47 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 .nx-dock-error > span { flex: 1; min-width: 0; }
 /* After the generic range rule so it wins: the volume slider has a fixed width (it must never stretch the dock). */
 input[type='range'].nx-range.nx-volume { width: 92px; flex: none; }
+
+
+/* ---- v0.11.1 sidebar: nothing in the column may shrink into its neighbour; the playlist list scrolls instead ---- */
+.nx-sidebar { overflow: hidden; }
+.nx-sidebar > * { flex: none; }
+.nx-sidebar > .nx-side-playlists { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+.nx-sidebar > .nx-side-foot { margin-top: 0; border-top: 1px solid var(--border); padding-top: 10px; }
+.nx-side-actions { display: flex; gap: 8px; padding: 0 2px; }
+.nx-side-actions .nx-btn { flex: 1; min-width: 0; justify-content: center; white-space: nowrap; }
+.nx-side-actions .nx-btn:last-child { flex: none; }
+.nx-nav-item { min-height: 40px; }
+.nx-nav-item > svg { width: 20px; height: 20px; }
+.nx-app[data-collapsed='true'] .nx-sidebar { padding-inline: 10px; align-items: stretch; }
+.nx-app[data-collapsed='true'] .nx-nav-item { padding: 0; height: 44px; width: 100%; justify-content: center; }
+.nx-app[data-collapsed='true'] .nx-nav-item[aria-current='page']::before { left: -10px; }
+.nx-app[data-collapsed='true'] .nx-nav-item[aria-current='page'] { background: rgba(var(--accent-primary-rgb), 0.24); }
+.nx-app[data-collapsed='true'] .nx-side-actions { flex-direction: column; }
+.nx-app[data-collapsed='true'] .nx-side-actions .nx-btn { flex: none; height: 44px; padding: 0; }
+.nx-app[data-collapsed='true'] .nx-side-actions .nx-btn-text { display: none; }
+.nx-app[data-collapsed='true'] .nx-side-playlists { display: none; }
+.nx-app[data-collapsed='true'] .nx-side-foot { border-top: 0; }
+@media (max-width: 920px) { .nx-side-actions { flex-direction: column; } .nx-side-actions .nx-btn-text { display: none; } .nx-side-playlists { display: none; } }
+
+/* ---- dock: tinted by the current cover (opaque base so content never shows through) ---- */
+.nx-dock { background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.20), rgba(var(--accent-secondary-rgb), 0.10) 60%, rgba(var(--accent-primary-rgb), 0.14)), color-mix(in srgb, rgb(var(--accent-deep-rgb)) 55%, var(--dock-bg)); transition: background 500ms var(--ease-out); }
+:root[data-theme='light'] .nx-dock { background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.16), rgba(var(--accent-secondary-rgb), 0.08)), var(--dock-bg); }
+.nx-dock[data-expandable='true'] { cursor: pointer; }
+.nx-dock[data-expandable='true'] button, .nx-dock[data-expandable='true'] input { cursor: pointer; }
+.nx-dock[data-state='playing']::before { content: ''; position: absolute; left: 0; right: 0; top: -1px; height: 1px; background: linear-gradient(90deg, transparent, rgba(var(--accent-primary-rgb), 0.9), transparent); }
+
+/* ---- tooltips ---- */
+.nx-tip { position: fixed; z-index: 400; pointer-events: none; display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; background: var(--menu-bg); color: var(--text); border: 1px solid var(--border-strong); box-shadow: 0 10px 28px rgba(0,0,0,.45); font-size: 12.5px; font-weight: 600; white-space: nowrap; animation: nx-fade 120ms var(--ease-out); }
+.nx-tip kbd { font: 600 11px var(--font-mono); padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border-strong); color: var(--text-muted); }
+
+/* ---- idle cursor (Now Playing) ---- */
+:root[data-idle='true'] *, :root[data-idle='true'] { cursor: none !important; }
+
+/* ---- .lrc badge on the cover (tiny, out of the lyrics' way) ---- */
+.nx-np-cover { position: relative; }
+.nx-lrc-badge { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 2; }
+.nx-lrc-btn { width: 24px; height: 24px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); opacity: 0; transition: opacity 160ms var(--ease-out), background 140ms; padding: 0; }
+.nx-np-cover:hover .nx-lrc-btn, .nx-lrc-btn:focus-visible, .nx-lrc-btn[data-active='true'] { opacity: 0.9; }
+.nx-lrc-btn:hover { opacity: 1; background: rgba(0,0,0,.72); }
+.nx-lrc-msg { max-width: 200px; border: 0; border-radius: 8px; padding: 5px 8px; font-size: 11px; color: #fff; background: rgba(0,0,0,.62); backdrop-filter: blur(8px); text-align: left; }

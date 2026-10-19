@@ -148,23 +148,30 @@ export function Lyrics() {
           <Icon name="down" size={15} /> Jump to now
         </button>
       )}
-      {(action.message !== undefined || (found && hasTrack)) && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, padding: '6px 0 0', minHeight: 40, flexWrap: 'wrap' }} data-testid="lyrics-actions">
-          {action.message !== undefined && (
-            <span role="status" data-testid="lyrics-action-message" style={{ color: 'var(--np-muted)', fontSize: 13 }}>
-              {action.message} <button type="button" className="nx-icon-btn nx-icon-btn--small" aria-label="Dismiss message" onClick={() => nowPlaying?.getState().dismissLyricsMessage()}><Icon name="close" size={14} /></button>
-            </span>
-          )}
-          {found && !lyrics.attached && <button type="button" className="nx-pill" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'transparent' }} disabled={action.busy} onClick={() => void nowPlaying?.getState().attachLyrics()}>Use a different .lrc…</button>}
-          {found && lyrics.attached && (
-            <>
-              <span style={{ color: 'var(--np-muted)', fontSize: 13 }} data-testid="lyrics-attached-note">Using the .lrc you attached</span>
-              <button type="button" className="nx-pill" style={{ background: 'rgba(255,255,255,.14)', color: '#fff', borderColor: 'transparent' }} aria-label="Remove attached lyrics" disabled={action.busy} onClick={() => void nowPlaying?.getState().detachLyrics()}>Remove</button>
-            </>
-          )}
-        </div>
-      )}
     </section>
   );
 }
 
+
+/** A tiny control on the cover: which .lrc is in use, with one click to swap or remove it. Shows only when a track has lyrics. */
+export function LyricsBadge() {
+  const lyrics = useNowPlaying((s) => s.lyrics);
+  const action = useNowPlaying((s) => s.lyricsAction);
+  const nowPlaying = useNowPlayingStoreApi();
+  const found = lyrics.status === 'ready' && lyrics.availability === 'found';
+  if (!found && action.message === undefined) return null;
+  const attached = found && lyrics.attached;
+  const label = attached ? 'Using the .lrc you attached – click to remove it' : 'Use a different .lrc file…';
+  return (
+    <div className="nx-lrc-badge" data-testid="lyrics-actions">
+      {action.message !== undefined && (
+        <button type="button" className="nx-lrc-msg" role="status" data-testid="lyrics-action-message" aria-label={`${action.message} (dismiss)`} onClick={() => nowPlaying?.getState().dismissLyricsMessage()}>{action.message}</button>
+      )}
+      {found && (
+        <button type="button" className="nx-lrc-btn" data-active={attached} aria-label={label} data-tip={label} disabled={action.busy} data-testid={attached ? 'lyrics-attached-note' : 'lyrics-attach-other'} onClick={() => void (attached ? nowPlaying?.getState().detachLyrics() : nowPlaying?.getState().attachLyrics())}>
+          <Icon name={attached ? 'close' : 'lyrics'} size={13} />
+        </button>
+      )}
+    </div>
+  );
+}

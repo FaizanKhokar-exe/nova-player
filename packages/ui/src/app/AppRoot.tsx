@@ -12,6 +12,9 @@ import { Sidebar } from './Sidebar.js';
 import { Topbar } from './Topbar.js';
 import { ContextMenuLayer, ModalLayer, PopoverLayer, ToastLayer } from './overlays.js';
 import { ScrollContext } from './scroll.js';
+import { SPEEDS } from '../prefs/prefs-store.js';
+import { resolveShortcut } from './shortcuts.js';
+import { Tooltips } from './Tooltips.js';
 import { ServicesProvider, usePrefs, useServices, useUi, type AppServices } from './services.js';
 import type { Route } from './ui-store.js';
 import { HomeView } from './views/Home.js';
@@ -53,6 +56,14 @@ function RouteView({ route }: { route: Route }) {
   }
 }
 
+export const IDLE_CURSOR_MS = 2500;
+
+/** Window fullscreen through the page itself (Electron maps the standard Fullscreen API onto the window): no extra IPC. */
+function toggleFullscreen(): void {
+  if (document.fullscreenElement !== null) void document.exitFullscreen().catch(() => undefined);
+  else void document.documentElement.requestFullscreen().catch(() => undefined);
+}
+
 const isTyping = (target: EventTarget | null): boolean => {
   const el = target as HTMLElement | null;
   return el !== null && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable === true);
@@ -88,16 +99,77 @@ function AppEffects() {
       if (event.altKey && key === 'ArrowLeft') { event.preventDefault(); ui.getState().back(); return; }
       if (event.altKey && key === 'ArrowRight') { event.preventDefault(); ui.getState().forward(); return; }
       if (isTyping(event.target)) return;
+      const el = event.target as HTMLElement;
+      const action = resolveShortcut({ key, ctrl, shift: event.shiftKey, alt: event.altKey });
+      if (action === undefined) return;
+      const s = ui.getState();
+      // Keys that a focused control or list already uses for itself are left to it.
+      const ownControl = el.closest('[role="slider"], [role="menu"], [role="listbox"], select') !== null || el.tagName === 'SELECT' || (el as HTMLInputElement).type === 'range';
+      const inList = el.closest('[data-row-index]') !== null; // up/down walk the song list; left/right are free for seeking
+      if (s.modal !== undefined || s.menu !== undefined) return;
       const p = playback.getState();
-      if (ctrl && key === 'ArrowRight') { event.preventDefault(); void p.next(); }
-      else if (ctrl && key === 'ArrowLeft') { event.preventDefault(); void p.previous(); }
-      else if (key === ' ' && !ctrl && (event.target as HTMLElement).tagName !== 'BUTTON') { event.preventDefault(); void p.togglePlay(); }
-      else if (!ctrl && key.toLowerCase() === 'l') { const s = ui.getState(); if (s.nowPlayingOpen && s.nowPlayingLayout === 'lyrics') s.closeNowPlaying(); else s.openNowPlaying('lyrics'); }
-      else if (!ctrl && key.toLowerCase() === 'm') { p.toggleMute(); }
+      const state = p;
+      switch (action.kind) {
+        case 'togglePlay': if (el.tagName === 'BUTTON') return; event.preventDefault(); void p.togglePlay(); return;
+        case 'next': event.preventDefault(); void p.next(); return;
+        case 'previous': event.preventDefault(); void p.previous(); return;
+        case 'seek': if (ownControl || state.session?.current === undefined) return; event.preventDefault(); p.seekMs(Math.max(0, state.positionStore.getState().positionMs + action.deltaSeconds * 1000)); return;
+        case 'volume': if (ownControl || inList) return; event.preventDefault(); p.setVolume(Math.min(1, Math.max(0, Math.round((state.engine.volume + action.delta) * 100) / 100))); return;
+        case 'seekPercent': { const duration = state.engine.durationMs; if (duration === undefined || state.session?.current === undefined) return; p.seekMs(Math.round((duration * action.percent) / 100)); return; }
+        case 'mute': p.toggleMute(); return;
+        case 'shuffle': void p.setShuffle(!(state.session?.shuffle ?? false)); return;
+        case 'repeat': void p.cycleRepeatMode(); return;
+        case 'queue': p.setQueueOpen(!state.queue.open); return;
+        case 'lyrics': if (s.nowPlayingOpen && s.nowPlayingLayout === 'lyrics') s.closeNowPlaying(); else s.openNowPlaying('lyrics'); return;
+        case 'fullscreen': event.preventDefault(); toggleFullscreen(); return;
+        case 'favorite': { const id = state.session?.current?.track.id; if (id !== undefined) void collections.getState().toggleFavorite(id); return; }
+        case 'settings': event.preventDefault(); s.navigate({ name: 'settings' }); return;
+        case 'speedUp':
+        case 'speedDown': {
+          const index = SPEEDS.indexOf(prefs.getState().speed as (typeof SPEEDS)[number]);
+          const next = SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, (index < 0 ? SPEEDS.indexOf(1) : index) + (action.kind === 'speedUp' ? 1 : -1)))];
+          if (next !== undefined) prefs.getState().setSpeed(next);
+          return;
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [ui, playback, prefs]);
+  }, [ui, playback, prefs, collections]);
+
+  // Double-click on empty window space toggles fullscreen.
+  useEffect(() => {
+    const onDouble = (event: MouseEvent) => {
+      const el = event.target as HTMLElement;
+      if (el.closest('button, input, a, select, textarea, [role="slider"], [data-row-index], .nx-tile-wrap, .nx-lyric, .nx-queue, .nx-dock, .nx-menu, .nx-modal, .nx-popover, [data-no-fullscreen]') !== null) return;
+      toggleFullscreen();
+    };
+    window.addEventListener('dblclick', onDouble);
+    return () => window.removeEventListener('dblclick', onDouble);
+  }, []);
+
+  // The pointer disappears after a few quiet seconds in Now Playing or fullscreen, and comes back on movement.
+  const npOpen = useUi((s) => s.nowPlayingOpen);
+  useEffect(() => {
+    const root = document.documentElement;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const show = () => {
+      root.dataset.idle = 'false';
+      if (timer !== undefined) clearTimeout(timer);
+      if (npOpen || document.fullscreenElement !== null) timer = setTimeout(() => { root.dataset.idle = 'true'; }, IDLE_CURSOR_MS);
+    };
+    show();
+    window.addEventListener('mousemove', show);
+    window.addEventListener('mousedown', show);
+    window.addEventListener('keydown', show);
+    return () => {
+      window.removeEventListener('mousemove', show);
+      window.removeEventListener('mousedown', show);
+      window.removeEventListener('keydown', show);
+      if (timer !== undefined) clearTimeout(timer);
+      root.dataset.idle = 'false';
+    };
+  }, [npOpen]);
   return null;
 }
 
@@ -145,6 +217,7 @@ export function AppRoot() {
       <ContextMenuLayer />
       <ModalLayer />
       <ToastLayer />
+      <Tooltips />
     </div>
   );
 }

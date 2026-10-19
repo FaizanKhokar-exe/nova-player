@@ -307,3 +307,130 @@ test('settings: equalizer preset, speed and visualizer style apply to the live a
   await expect(second.window.getByRole('group', { name: 'Spectrum style' }).getByRole('button', { name: 'Wave' })).toHaveAttribute('aria-pressed', 'true');
   await second.app.close();
 });
+
+/* ---------------------------------- v0.11.1: first Windows feedback batch ---------------------------------- */
+
+const overlaps = (a: { x: number; y: number; width: number; height: number }, b: { x: number; y: number; width: number; height: number }): boolean =>
+  a.x < b.x + b.width - 1 && b.x < a.x + a.width - 1 && a.y < b.y + b.height - 1 && b.y < a.y + a.height - 1;
+
+test('clicking a song row plays it (no need for the small play button); the heart and ⋯ do not', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await expect(window.getByTestId('player-title')).toHaveText('Alpha');
+  await rowFor(window, 'Alpha').hover();
+  await rowFor(window, 'Alpha').getByTestId('row-more').click();
+  await expect(window.getByRole('menu')).toBeVisible();
+  await expect(window.getByTestId('player-title')).toHaveText('Alpha'); // opening ⋯ did not restart or change anything
+  await window.keyboard.press('Escape');
+  await app.close();
+});
+
+test('the player bar is themed from the cover and a click on it opens Now Playing, but its buttons keep their own job', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await expect(window.getByTestId('player-bar')).toHaveAttribute('data-expandable', 'true');
+  await window.getByTestId('player-queue').click(); // a control: must not expand
+  await expect(window.getByTestId('now-playing')).toBeHidden();
+  await window.keyboard.press('q');
+  const bar = await window.getByTestId('player-bar').boundingBox();
+  await window.mouse.click((bar?.x ?? 0) + (bar?.width ?? 0) * 0.62, (bar?.y ?? 0) + 6); // empty part of the bar
+  await expect(window.getByTestId('now-playing')).toBeVisible();
+  await app.close();
+});
+
+test('there is no native menu bar (File / Edit / View / Window)', async () => {
+  const { app } = await openApp();
+  expect(await app.evaluate(({ Menu }) => Menu.getApplicationMenu() === null)).toBe(true);
+  expect(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every((w) => !w.isMenuBarVisible()))).toBe(true);
+  await app.close();
+});
+
+test('hovering an icon-only control shows its name (and shortcut) in a tooltip', async () => {
+  const { app, window } = await openApp();
+  await window.getByTestId('player-queue').hover();
+  await expect(window.getByTestId('tooltip')).toContainText('Queue', { timeout: 5_000 });
+  await expect(window.getByTestId('tooltip')).toContainText('Q');
+  await window.mouse.move(300, 300);
+  await expect(window.getByTestId('tooltip')).toBeHidden();
+  await app.close();
+});
+
+test('sidebar: nothing overlaps (footer buttons vs the playlist list) in expanded and collapsed mode, at a short window height too', async () => {
+  const { app, window } = await openApp();
+  for (const height of [820, 560]) {
+    await window.setViewportSize({ width: 1360, height });
+    const foot = await window.locator('.nx-side-foot').boundingBox();
+    const lists = await window.getByTestId('sidebar-playlists').boundingBox();
+    expect(foot).not.toBeNull();
+    if (foot !== null && lists !== null) expect(overlaps(foot, lists)).toBe(false);
+    await expect(window.getByTestId('add-folder')).toBeVisible();
+  }
+  await window.getByTestId('sidebar-toggle').click();
+  await expect(window.getByTestId('app-shell')).toHaveAttribute('data-collapsed', 'true');
+  const sizes = await window.locator('.nx-sidebar .nx-nav-item').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; }));
+  expect(new Set(sizes).size).toBe(1); // every collapsed button is the same size
+  expect(await window.locator('.nx-sidebar').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
+  await window.getByTestId('nav-songs').hover();
+  await expect(window.getByTestId('tooltip')).toContainText('Songs', { timeout: 5_000 });
+  await app.close();
+});
+
+test('Home: the favourites tiles sit side by side at one size, never on top of each other', async () => {
+  const { app, window } = await openApp();
+  for (const name of ['Alpha', 'Bravo', 'Courtside']) {
+    await rowFor(window, name).hover();
+    await rowFor(window, name).getByTestId('row-heart').click();
+  }
+  await window.getByTestId('nav-home').click();
+  const tiles = window.getByTestId('home-favorites').getByTestId('favorite-tile');
+  await expect(tiles).toHaveCount(3, { timeout: 10_000 });
+  const boxes = await tiles.evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; }));
+  for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) expect(overlaps(boxes[i] as never, boxes[j] as never)).toBe(false);
+  expect(new Set(boxes.map((b) => Math.round(b.width))).size).toBe(1);
+  expect(new Set(boxes.map((b) => Math.round(b.y))).size).toBe(1);
+  // the section below does not start before this one ends
+  const recents = await window.getByTestId('home-favorites').boundingBox();
+  const shelf = await window.getByTestId('home-favorites').locator('.nx-shelf').boundingBox();
+  expect((shelf?.y ?? 0) + (shelf?.height ?? 0)).toBeLessThanOrEqual((recents?.y ?? 0) + (recents?.height ?? 0) + 1);
+  await shot(window, '20-home-tiles');
+  await app.close();
+});
+
+test('keyboard: seek, volume, shuffle, speed and favourite shortcuts', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  const before = (await audioOf(window)).currentTime;
+  await window.keyboard.press('Shift+ArrowRight');
+  await expect.poll(async () => (await audioOf(window)).currentTime).toBeGreaterThan(before + 10);
+  const volume = await window.evaluate(() => (document.getElementById('nova-audio') as HTMLAudioElement).volume);
+  await window.getByTestId('nav-settings').focus(); // focus off the song list, where Up/Down walk the rows
+  await window.keyboard.press('ArrowDown');
+  await expect.poll(() => window.evaluate(() => (document.getElementById('nova-audio') as HTMLAudioElement).volume)).toBeLessThan(volume);
+  await window.keyboard.press('s');
+  await expect(window.getByTestId('player-shuffle')).toHaveAttribute('aria-pressed', 'true');
+  await window.keyboard.press(']');
+  await expect.poll(() => window.evaluate(() => (document.getElementById('nova-audio') as HTMLAudioElement).playbackRate)).toBeGreaterThan(1);
+  await window.keyboard.press('h');
+  await expect(window.getByTestId('player-heart')).toHaveAttribute('aria-pressed', 'true');
+  await app.close();
+});
+
+test('Now Playing: double-click toggles fullscreen and the pointer hides itself when idle, returning on movement', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await expect(window.getByTestId('now-playing')).toBeVisible();
+  await window.mouse.move(640, 300);
+  await expect.poll(() => window.evaluate(() => document.documentElement.dataset['idle']), { timeout: 8_000 }).toBe('true');
+  await window.mouse.move(660, 320);
+  await expect.poll(() => window.evaluate(() => document.documentElement.dataset['idle'])).toBe('false');
+  await window.mouse.dblclick(660, 320);
+  await expect.poll(() => window.evaluate(() => document.fullscreenElement !== null)).toBe(true);
+  await window.mouse.dblclick(660, 320);
+  await expect.poll(() => window.evaluate(() => document.fullscreenElement !== null)).toBe(false);
+  await app.close();
+});

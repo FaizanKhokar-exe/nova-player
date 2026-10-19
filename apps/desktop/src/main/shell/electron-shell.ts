@@ -11,7 +11,8 @@ import { createShellStateStore, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, type ShellS
 import { createTrackNotifier, type NotificationPort } from './track-notifier.js';
 import { createTrayController, type TrayMenuItem, type TrayPort } from './tray-controller.js';
 import { createWindowManager } from './window-manager.js';
-import { applyWindowPolicy } from './window-policy.js';
+import { buildThumbarButtons } from './thumbar.js';
+import { applyWindowPolicy, isAppPage } from './window-policy.js';
 
 export interface ElectronShellOptions {
   /** The playback application's event stream (`PlaybackApplication.subscribe`); the shell listens for started tracks. */
@@ -92,6 +93,7 @@ export function createElectronShell(options: ElectronShellOptions): AppShell {
   const iconPath = resourcePath(mainDir, 'icon.png');
   const trayIconPath = resourcePath(mainDir, 'tray.png');
 
+  Menu.setApplicationMenu(null);
   const stateStore = createShellStateStore({ filePath: path.join(app.getPath('userData'), 'shell-state.json'), io: fileIo, log });
 
   function createMainWindow(state: WindowState): BrowserWindow {
@@ -103,6 +105,8 @@ export function createElectronShell(options: ElectronShellOptions): AppShell {
       minWidth: WINDOW_MIN_WIDTH,
       minHeight: WINDOW_MIN_HEIGHT,
       icon: iconPath,
+      // No File/Edit/View/Window bar: the app is its own chrome (also removed below, so Alt never brings it back).
+      autoHideMenuBar: true,
       show: false,
       webPreferences: {
         preload: path.join(mainDir, '../preload/index.cjs'),
@@ -112,15 +116,24 @@ export function createElectronShell(options: ElectronShellOptions): AppShell {
       },
     });
     if (state.maximized) mainWindow.maximize();
-    mainWindow.once('ready-to-show', () => mainWindow.show());
+    mainWindow.removeMenu();
+    mainWindow.once('ready-to-show', () => {
+      mainWindow.show();
+      // Windows: Previous / Play-Pause / Next under the taskbar preview. They go through the same shell command path as the tray and media keys. (No-op elsewhere.)
+      if (process.platform === 'win32') {
+        const buttons = buildThumbarButtons((name) => resourcePath(mainDir, name)).map((button) => ({ tooltip: button.tooltip, icon: nativeImage.createFromPath(button.iconPath), click: () => void dispatch(button.id) }));
+        if (!buttons.some((button) => button.icon.isEmpty())) mainWindow.setThumbarButtons(buttons);
+        else log('[nova] the taskbar buttons are unavailable: an icon could not be loaded.', undefined);
+      }
+    });
 
     // Phase 8: the window shows only the application's own page; a link that wants a new window is handed to the
     // OS browser only when it is an ordinary http(s) address (never `file:` or another program's scheme); no
-    // `<webview>`; every permission request is refused (the app is local and needs none). See `window-policy.ts`.
+    // `<webview>`; every permission request is refused except "fullscreen" for our own page (double-click / F11 fullscreen); see `window-policy.ts`.
     const location = resolveAppLocation(mainDir, is.dev ? process.env.ELECTRON_RENDERER_URL : undefined);
     applyWindowPolicy(mainWindow.webContents, { appUrl: location.url, openExternal: (url) => shell.openExternal(url), log });
-    mainWindow.webContents.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
-    mainWindow.webContents.session.setPermissionCheckHandler(() => false);
+    mainWindow.webContents.session.setPermissionRequestHandler((_contents, permission, callback, details) => callback(permission === 'fullscreen' && isAppPage(details.requestingUrl, location.url)));
+    mainWindow.webContents.session.setPermissionCheckHandler((_contents, permission, requestingOrigin, details) => permission === 'fullscreen' && isAppPage(details.requestingUrl ?? requestingOrigin, location.url));
     mainWindow.webContents.on('render-process-gone', (_event, details) => log(`[nova] the window's renderer process ended (${details.reason}, exit code ${details.exitCode}).`, undefined));
 
     // A load that fails (the window was closed while loading, the file is missing) is logged, never an unhandled rejection.

@@ -150,10 +150,12 @@ describe('removeRoot while the watcher is reconciling that root', () => {
     const ra = await app.addRoot(a);
     await app.addRoot(b);
     await app.startWatching();
-    expect(watched).toEqual([a, b]);
+    // The ORDER in which roots are watched is not part of the contract (the list order is storage-defined and differs between platforms), so compare as sets.
+    const same = (actual: readonly string[], expected: readonly string[]) => expect([...actual].sort()).toEqual([...expected].sort());
+    same(watched, [a, b]);
 
     await app.removeRoot(ra.id);
-    expect(closed).toEqual([a, b]); // the old watcher was stopped...
+    same(closed, [a, b]); // the old watcher was stopped...
     expect(watched.slice(2)).toEqual([b]); // ...and a new one watches only what is left
     expect(app.getWatcherStatus().running).toBe(true);
     expect(app.getWatcherStatus().roots.map((entry) => entry.path)).toEqual([b]);
@@ -161,7 +163,8 @@ describe('removeRoot while the watcher is reconciling that root', () => {
     // A removal that fails (unknown id) must not stop a running watcher.
     await expect(app.removeRoot('123e4567-e89b-42d3-a456-426614174000')).rejects.toMatchObject({ code: 'root-not-found' });
     expect(app.getWatcherStatus().running).toBe(true);
-    expect(watched).toEqual([a, b, b]);
+    same(watched.slice(0, 2), [a, b]);
+    expect(watched.slice(2)).toEqual([b]); // the failed removal started nothing new
   });
 
   it('a database failure during removal still restores the watcher and keeps the tracks', async () => {
