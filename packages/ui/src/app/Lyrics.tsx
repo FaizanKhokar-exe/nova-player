@@ -153,7 +153,7 @@ export function Lyrics() {
 }
 
 
-/** A tiny control on the cover: which .lrc is in use, with one click to swap or remove it. Shows only when a track has lyrics. */
+/** A small control in the player bar (the only place for it): which .lrc is in use, with one click to swap or remove it. Shows only when the playing song has lyrics. */
 export function LyricsBadge() {
   const lyrics = useNowPlaying((s) => s.lyrics);
   const action = useNowPlaying((s) => s.lyricsAction);
@@ -169,7 +169,7 @@ export function LyricsBadge() {
       )}
       {found && (
         <button type="button" className="nx-lrc-btn" data-active={attached} aria-label={label} data-tip={label} disabled={action.busy} data-testid={attached ? 'lyrics-attached-note' : 'lyrics-attach-other'} onClick={() => void (attached ? nowPlaying?.getState().detachLyrics() : nowPlaying?.getState().attachLyrics())}>
-          <Icon name={attached ? 'close' : 'lyrics'} size={13} />
+          <Icon name={attached ? 'close' : 'upload'} size={15} />
         </button>
       )}
     </div>

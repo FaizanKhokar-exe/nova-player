@@ -202,7 +202,9 @@ button { cursor: pointer; }
 .nx-icon-btn:disabled { opacity: 0.4; cursor: default; }
 .nx-icon-btn--small { width: 32px; height: 32px; }
 .nx-heart[aria-pressed='true'] { color: #ff4d79; }
-.nx-heart[aria-pressed='true'] svg { fill: currentColor; animation: nx-pop 380ms var(--ease-spring); }
+.nx-heart { position: relative; }
+.nx-heart[aria-pressed='true'] svg { fill: currentColor; }
+.nx-heart[data-burst] svg { animation: nx-heart-pop 620ms var(--ease-spring); }
 @keyframes nx-pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
 .nx-play { display: grid; place-items: center; width: 48px; height: 48px; border: 0; border-radius: 50%; background: var(--text); color: var(--bg); flex: none; transition: transform 140ms var(--ease-out), box-shadow 200ms; box-shadow: 0 6px 22px rgba(var(--accent-primary-rgb), 0.35); }
 .nx-play:hover:not(:disabled) { transform: scale(1.07); box-shadow: 0 8px 30px rgba(var(--accent-primary-rgb), 0.55); }
@@ -484,10 +486,49 @@ input[type='range'].nx-range.nx-volume { width: 92px; flex: none; }
 /* ---- idle cursor (Now Playing) ---- */
 :root[data-idle='true'] *, :root[data-idle='true'] { cursor: none !important; }
 
-/* ---- .lrc badge on the cover (tiny, out of the lyrics' way) ---- */
-.nx-np-cover { position: relative; }
-.nx-lrc-badge { position: absolute; right: 8px; top: 8px; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; z-index: 2; }
-.nx-lrc-btn { width: 24px; height: 24px; border-radius: 50%; border: 0; display: grid; place-items: center; color: #fff; background: rgba(0,0,0,.5); backdrop-filter: blur(8px); opacity: 0; transition: opacity 160ms var(--ease-out), background 140ms; padding: 0; }
-.nx-np-cover:hover .nx-lrc-btn, .nx-lrc-btn:focus-visible, .nx-lrc-btn[data-active='true'] { opacity: 0.9; }
-.nx-lrc-btn:hover { opacity: 1; background: rgba(0,0,0,.72); }
-.nx-lrc-msg { max-width: 200px; border: 0; border-radius: 8px; padding: 5px 8px; font-size: 11px; color: #fff; background: rgba(0,0,0,.62); backdrop-filter: blur(8px); text-align: left; }
+/* ---- .lrc control in the player bar ---- */
+.nx-lrc-badge { position: relative; display: flex; align-items: center; }
+.nx-lrc-btn { width: 30px; height: 30px; border-radius: 50%; border: 0; display: grid; place-items: center; color: var(--text-muted); background: transparent; padding: 0; transition: background 140ms, color 140ms; }
+.nx-lrc-btn:hover { background: var(--surface); color: var(--text); }
+.nx-lrc-btn[data-active='true'] { color: var(--accent-primary); }
+.nx-lrc-msg { position: absolute; right: 0; bottom: calc(100% + 14px); max-width: 240px; border: 1px solid var(--border-strong); border-radius: 8px; padding: 5px 9px; font-size: 11.5px; color: var(--text); background: var(--menu-bg); text-align: left; white-space: nowrap; z-index: 20; box-shadow: 0 10px 26px rgba(0,0,0,.4); }
+
+/* ---- seek-bar hover preview: loudness bars + where the words are ---- */
+.nx-seek-wrap { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+.nx-seek-wrap > input { flex: 1; width: 100%; min-width: 0; }
+.nx-seekprev { position: absolute; left: 0; right: 0; bottom: calc(100% + 12px); height: 58px; pointer-events: none; z-index: 20; padding: 6px 4px 4px; border-radius: 12px; background: color-mix(in srgb, var(--menu-bg) 92%, transparent); border: 1px solid var(--border-strong); box-shadow: 0 12px 30px rgba(0,0,0,.4); backdrop-filter: blur(10px); animation: nx-fade 120ms var(--ease-out); }
+.nx-seekprev-bars { display: flex; align-items: flex-end; gap: 1px; height: 100%; }
+.nx-seekprev-bar { flex: 1; min-width: 1px; border-radius: 2px 2px 0 0; background: rgba(var(--accent-primary-rgb), 0.55); position: relative; }
+.nx-seekprev-bar[data-vocal='true'] { background: linear-gradient(0deg, rgba(var(--accent-secondary-rgb), calc(0.55 + var(--vocal) * 0.45)), rgba(var(--accent-primary-rgb), 0.55) 70%); }
+.nx-seekprev[data-analysing='true'] .nx-seekprev-bar { animation: nx-seekprev-wait 900ms ease-in-out infinite alternate; }
+@keyframes nx-seekprev-wait { from { opacity: 0.25; } to { opacity: 0.7; } }
+.nx-seekprev-cursor { position: absolute; top: 4px; bottom: 4px; width: 2px; margin-left: -1px; border-radius: 2px; background: var(--text); box-shadow: 0 0 8px rgba(var(--accent-primary-rgb), .9); }
+.nx-seekprev-chip { position: absolute; bottom: calc(100% + 6px); transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; padding: 3px 9px; border-radius: 8px; background: var(--menu-bg); border: 1px solid var(--border-strong); font-size: 11px; line-height: 1.25; white-space: nowrap; }
+.nx-seekprev-chip b { font: 700 12px var(--font-mono); }
+.nx-seekprev-chip span { color: var(--text-muted); }
+.nx-seekprev-chip span:empty { display: none; }
+.nx-np .nx-seekprev { --menu-bg: rgba(20,20,28,.9); --text: #fff; --text-muted: rgba(255,255,255,.7); }
+
+/* ---- favourite burst ---- */
+@keyframes nx-heart-pop { 0% { transform: scale(1); } 22% { transform: scale(0.72); } 50% { transform: scale(1.5) rotate(-8deg); } 72% { transform: scale(0.95) rotate(4deg); } 100% { transform: scale(1); } }
+.nx-burst { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+.nx-burst i { position: absolute; left: 50%; top: 50%; }
+.nx-burst-ring { width: 8px; height: 8px; margin: -4px 0 0 -4px; border-radius: 50%; border: 2px solid #ff4d79; opacity: 0; animation: nx-burst-ring 560ms var(--ease-out) forwards; }
+.nx-burst-dot { width: 5px; height: 5px; margin: -2.5px 0 0 -2.5px; border-radius: 50%; background: #ff4d79; opacity: 0; transform: rotate(var(--a)) translateY(0); animation: nx-burst-dot 620ms var(--ease-out) forwards; }
+.nx-burst-dot:nth-child(even) { background: #ffc2d1; width: 4px; height: 4px; }
+.nx-burst-dot:nth-child(3n) { background: var(--accent-secondary, #ffb347); }
+@keyframes nx-burst-ring { 0% { transform: scale(0.4); opacity: 0.9; } 100% { transform: scale(4.2); opacity: 0; } }
+@keyframes nx-burst-dot { 0% { opacity: 1; transform: rotate(var(--a)) translateY(0) scale(1); } 100% { opacity: 0; transform: rotate(var(--a)) translateY(calc(var(--d) * -1)) scale(0.2); } }
+
+/* ---- v0.11.2 polish ---- */
+/* Tiles: a <button> shrink-wraps its content, so a wide cover or long title made tiles different sizes and overlap. */
+.nx-tile { width: 100%; max-width: 100%; }
+.nx-tile-cover { min-width: 0; overflow: hidden; }
+.nx-tile-cover .nx-cover img { max-width: 100%; }
+/* An app, not a web page: nothing is selectable (inputs and the lyric/search fields still are). */
+html, body { user-select: none; -webkit-user-select: none; }
+input, textarea, [contenteditable='true'], [data-selectable] { user-select: text; -webkit-user-select: text; }
+/* The Now Playing cover's shadow must never darken the title and controls under it. */
+.nx-np-cover { box-shadow: 0 14px 34px -12px rgba(0,0,0,.5); }
+.nx-np-left > :not(.nx-np-cover) { position: relative; z-index: 1; }
+.nx-tile-cover { box-shadow: none; }

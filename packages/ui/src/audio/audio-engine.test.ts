@@ -18,7 +18,7 @@ describe('beat analyzer', () => {
     expect(kick.beat).toBe(true);
     expect(kick.pulse).toBe(1);
     const tooSoon = analyzer.analyze(frame(230), 43, now + 16);
-    expect(tooSoon.beat).toBe(false); // inside the 210 ms gap
+    expect(tooSoon.beat).toBe(false); // inside the minimum gap
     expect(tooSoon.pulse).toBeLessThan(1);
   });
   it('never fires on silence or a constant tone', () => {
@@ -26,8 +26,11 @@ describe('beat analyzer', () => {
     let now = 0;
     const hits = Array.from({ length: 200 }, () => analyzer.analyze(frame(0), 43, (now += 16)).beat).filter(Boolean);
     expect(hits).toHaveLength(0);
-    const steady = Array.from({ length: 200 }, () => analyzer.analyze(frame(140), 43, (now += 16)).beat).filter(Boolean);
-    expect(steady.length).toBeLessThanOrEqual(1); // at most the first ramp-up
+    const steady = Array.from({ length: 200 }, () => analyzer.analyze(frame(140), 43, (now += 16)).beat);
+    // v0.11.2: kick OR snare onsets count, so the ramp-up from silence may register on both bands (at most 2 hits)...
+    expect(steady.filter(Boolean).length).toBeLessThanOrEqual(2);
+    // ...but a tone that just keeps going must never keep pulsing once it is the new normal.
+    expect(steady.slice(100).filter(Boolean)).toHaveLength(0);
   });
   it('fires again after the gap, and reset clears state', () => {
     const analyzer = createBeatAnalyzer();

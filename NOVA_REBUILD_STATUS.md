@@ -994,3 +994,18 @@ The user installed 0.11.0 on a real Windows PC and reported the first batch. Cha
   storage-defined and differed on GitHub's Linux runner; it now compares as sets (same intent: which folders are watched/closed, and that a failed removal starts nothing new).
 - New e2e (nova2.spec.ts): row click plays, dock click expands, no menu, tooltips, sidebar/Home no-overlap geometry (incl. collapsed + short window),
   shortcuts, fullscreen + idle cursor.
+
+## Phase 13 — second feedback batch (v0.11.2)
+- **Tiles different sizes / overlapping (real root cause):** a `<button>` shrink-wraps its content, so a wide cover or long title stretched a tile to hundreds of px.
+  `.nx-tile` is now `width: 100%` with the cover clipped. New e2e uses a very long title + big cover and asserts equal tile widths.
+- **Cover shadow over text:** the Now Playing cover's large shadow darkened the title below it; it is now smaller and the text sits above it. Tile shadows removed.
+- **.lrc attach/remove** exists only in the player bar (removed from Now Playing / cover); e2e asserts it is absent on Now Playing.
+- **Beats more frequent:** sensitivity 1.32→1.16, minimum gap 210→125 ms, floor 0.18→0.10, shorter average, and a second onset detector on the mid band
+  (snare/clap) in addition to the bass kick. Deliberate test change: "never fires on a constant tone" previously allowed ≤1 hit; it now allows ≤2 during the
+  ramp-up from silence (kick + snare band) and additionally asserts ZERO hits in the steady second half. Tuning is by ear on real music: please judge on your PC.
+- **Text selection disabled** app-wide (inputs still selectable).
+- **Favourite animation:** `HeartButton` pops and bursts a ring of sparks when a song BECOMES a favourite (click, H key, menu); rows that merely appear already favourited do not animate.
+- **Seek-bar hover preview:** hovering the bar shows loudness bars of the whole song, lyric-dense slices coloured, a time chip with Loud/Medium/Soft and
+  lyrics/instrumental, and a cursor; it vanishes with the pointer. The loudness is computed on first hover from the playing song (`playback/energy-profile.ts`: fetch + Web Audio decode, cached
+  in memory per track; files over 96 MB are skipped). Deliberate policy changes: CSP gains `connect-src 'self' nova-media:` (pinned in the boundary test), and that one file is exempt from the
+  "no fetch in the renderer" rule (it never builds an address; the playback store hands it the one it already plays).

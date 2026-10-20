@@ -1,3 +1,4 @@
+import { HeartButton } from './parts.js';
 import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useStore } from 'zustand';
@@ -103,9 +104,7 @@ const Row = memo(function Row(p: RowProps) {
       <span className="nx-row-album nx-ellipsis nx-text nx-col-album" dir="auto">{track.album ?? ''}</span>
       <span className="nx-row-time">{formatDuration(track.durationSeconds)}</span>
       <div className="nx-row-actions">
-        <button type="button" className="nx-icon-btn nx-icon-btn--small nx-heart" aria-pressed={p.favorite} aria-label={p.favorite ? `Remove ${track.title} from Favorites` : `Add ${track.title} to Favorites`} data-testid="row-heart" onClick={(event) => (event.stopPropagation(), p.onFavorite(track.id))}>
-          <Icon name="heart" size={17} />
-        </button>
+        <HeartButton className="nx-icon-btn--small" size={17} stop favorite={p.favorite} label={p.favorite ? `Remove ${track.title} from Favorites` : `Add ${track.title} to Favorites`} testId="row-heart" onToggle={() => p.onFavorite(track.id)} />
         <button
           type="button"
           className="nx-icon-btn nx-icon-btn--small"

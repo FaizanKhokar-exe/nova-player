@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
+import { createProfileLoader } from './energy-profile.js';
 import type {
   IpcRequest,
   IpcResponse,
@@ -127,6 +128,8 @@ export interface PlaybackActions {
   previous(): Promise<void>;
   /** Seeks to a position in whole milliseconds. */
   seekMs(positionMs: number): void;
+  /** Loudness per slice of the CURRENT song (for the seek-bar hover preview); undefined when it cannot be analysed. */
+  energyProfile(): Promise<readonly number[] | undefined>;
   /** 0..1. Raising the volume above 0 also un-mutes. */
   setVolume(volume: number): void;
   toggleMute(): void;
@@ -214,6 +217,7 @@ function toMs(seconds: number): number {
 }
 
 export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, options: PlaybackStoreOptions = {}): PlaybackStoreApi {
+  const loadProfile = createProfileLoader();
   const saveIntervalMs = options.positionSaveIntervalMs ?? 5_000;
   const now = options.now ?? Date.now;
   const positionStore = createStore<PositionState>(() => ({ positionMs: 0 }));
@@ -608,6 +612,11 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       previous() {
         if (get().session?.current === undefined) return Promise.resolve();
         return runCommand(() => call('playback:previous', { positionMs: positionMs() }));
+      },
+
+      energyProfile() {
+        const current = get().session?.current;
+        return current === undefined ? Promise.resolve(undefined) : loadProfile(current.track.id, current.mediaUrl);
       },
 
       seekMs(target) {

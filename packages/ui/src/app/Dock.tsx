@@ -1,8 +1,10 @@
+import { HeartButton } from './parts.js';
 import { useRef } from 'react';
 import { useStore } from 'zustand';
 import { usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { Icon } from '../theme/Icon.js';
 import { Spectrum } from '../visuals/Spectrum.js';
+import { LyricsBadge } from './Lyrics.js';
 import { Cover } from './Cover.js';
 import { SeekBar } from './SeekBar.js';
 import { useAudioControls, usePrefs, useServices, useUi } from './services.js';
@@ -62,9 +64,7 @@ export function Dock() {
               <span className="nx-dock-title nx-ellipsis nx-text" dir="auto" data-testid="player-title">{track.title}</span>
               <span className="nx-dock-artist nx-ellipsis nx-text" dir="auto" data-testid="player-artist">{track.artist}</span>
             </div>
-            <button type="button" className="nx-icon-btn nx-icon-btn--small nx-heart" aria-pressed={favorite} aria-label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} data-testid="player-heart" onClick={() => void collections.getState().toggleFavorite(track.id)}>
-              <Icon name="heart" size={18} />
-            </button>
+            <HeartButton className="nx-icon-btn--small" favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="player-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
           </>
         )}
       </div>
@@ -96,6 +96,7 @@ export function Dock() {
             <Spectrum style={visualizer === 'ring' ? 'bars' : visualizer} bars={16} />
           </div>
         )}
+        <LyricsBadge />
         <button type="button" className="nx-icon-btn" aria-label="Lyrics" data-keys="L" data-testid="player-lyrics" disabled={track === undefined} onClick={() => ui.getState().openNowPlaying('lyrics')}>
           <Icon name="lyrics" size={19} />
         </button>

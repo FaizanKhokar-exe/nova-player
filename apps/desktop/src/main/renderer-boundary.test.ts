@@ -98,6 +98,10 @@ describe('renderer boundary: globals that would bypass the bridge', () => {
   const ALLOWED: Record<string, readonly string[]> = {
     'packages/ui/src/theme/theme-store.ts': ['localStorage'],
     'packages/ui/src/prefs/prefs-store.ts': ['localStorage'],
+    // v0.11.2 (deliberate, narrow exception): the seek-bar hover preview needs the loudness profile of the playing song.
+    // This one file fetches the address the playback store hands it (it never builds one: the nova-media rule below still holds)
+    // and decodes it with Web Audio; the result is a few hundred numbers kept in memory.
+    'packages/ui/src/playback/energy-profile.ts': ['fetch of a media address'],
   };
 
   it.each(all.map((f) => [rel(f), f] as const))('%s uses none of them', (name, file) => {
@@ -208,7 +212,7 @@ describe('Phase 8: the page\'s content security policy', () => {
   const policy = /Content-Security-Policy"\s+content="([^"]+)"/.exec(html)?.[1] ?? '';
 
   it('allows only the app itself, plus nova-media audio and data: images, and forbids plugins, <base> and form posts', () => {
-    for (const directive of ["default-src 'self'", "script-src 'self'", 'media-src \'self\' nova-media:', "object-src 'none'", "base-uri 'none'", "form-action 'none'"]) {
+    for (const directive of ["default-src 'self'", "script-src 'self'", 'media-src \'self\' nova-media:', "connect-src 'self' nova-media:" /* v0.11.2: the seek-bar preview reads the playing song through the same address (nothing else may connect) */, "object-src 'none'", "base-uri 'none'", "form-action 'none'"]) {
       expect(policy).toContain(directive);
     }
     expect(policy).not.toMatch(/unsafe-eval|script-src[^;]*unsafe-inline|http:|https:|\*/);

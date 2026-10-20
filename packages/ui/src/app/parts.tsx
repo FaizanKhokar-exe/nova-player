@@ -1,4 +1,4 @@
-import type { ReactNode, MouseEvent } from 'react';
+import { useState, type ReactNode, type MouseEvent } from 'react';
 import { Icon, type IconName } from '../theme/Icon.js';
 
 /** Small presentational pieces shared by the views. */
@@ -85,5 +85,31 @@ export function ErrorNote({ message, onRetry }: { message: string; onRetry?: () 
       <span>{message}</span>
       {onRetry !== undefined && <button type="button" className="nx-btn nx-btn--small" onClick={onRetry}>Try again</button>}
     </div>
+  );
+}
+
+const BURST = [0, 1, 2, 3, 4, 5, 6, 7];
+
+/**
+ * The heart button. Whenever it BECOMES a favourite while on screen (a click, the H key, a menu), the heart pops and a ring of
+ * small hearts and sparks bursts out. A row that merely scrolls into view already favourited does not animate.
+ */
+export function HeartButton({ favorite, label, onToggle, className = '', size = 18, testId, stop = false }: { favorite: boolean; label: string; onToggle: () => void; className?: string; size?: number; testId?: string; stop?: boolean }) {
+  const [seen, setSeen] = useState(favorite);
+  const [burst, setBurst] = useState(0);
+  if (seen !== favorite) {
+    setSeen(favorite);
+    if (favorite) setBurst((n) => n + 1);
+  }
+  return (
+    <button type="button" className={`nx-icon-btn nx-heart ${className}`} aria-pressed={favorite} aria-label={label} data-testid={testId} data-burst={burst > 0 ? burst : undefined} onClick={(event) => { if (stop) event.stopPropagation(); onToggle(); }}>
+      <Icon name="heart" size={size} />
+      {burst > 0 && (
+        <span key={burst} className="nx-burst" aria-hidden="true" data-testid="heart-burst">
+          <i className="nx-burst-ring" />
+          {BURST.map((n) => <i key={n} className="nx-burst-dot" style={{ ['--a' as string]: `${n * 45}deg`, ['--d' as string]: n % 2 === 0 ? '26px' : '20px' }} />)}
+        </span>
+      )}
+    </button>
   );
 }

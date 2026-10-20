@@ -12,6 +12,7 @@ const SHOW_DELAY_MS = 450;
 
 /** What an element should say in its tooltip: `data-tip`, or its `aria-label` when it shows no text of its own (icon buttons). */
 export function tipTextFor(el: HTMLElement): string | undefined {
+  if (el.hasAttribute('data-no-tip')) return undefined;
   const explicit = el.getAttribute('data-tip');
   if (explicit !== null && explicit !== '') return explicit;
   const label = el.getAttribute('aria-label');

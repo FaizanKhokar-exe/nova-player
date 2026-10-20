@@ -69,7 +69,7 @@ test.afterEach(() => {
   fs.rmSync(box.sandbox, { recursive: true, force: true });
 });
 
-async function openApp(): Promise<{ app: Awaited<ReturnType<typeof launchApp>>['app']; window: Page }> {
+async function openApp(extraTracks = 0): Promise<{ app: Awaited<ReturnType<typeof launchApp>>['app']; window: Page }> {
   const { app, window } = await launchApp({ userDataDir: box.userData });
   await window.setViewportSize({ width: 1360, height: 820 });
   await pickFolders(app, box.music);
@@ -77,7 +77,7 @@ async function openApp(): Promise<{ app: Awaited<ReturnType<typeof launchApp>>['
   await window.getByTestId('home-add-folder').click();
   await expect(window.getByTestId('nav-songs')).toBeVisible();
   await window.getByTestId('nav-songs').click();
-  await expect(window.getByTestId('track-row')).toHaveCount(7, { timeout: 30_000 });
+  await expect(window.getByTestId('track-row')).toHaveCount(7 + extraTracks, { timeout: 30_000 });
   return { app, window };
 }
 
@@ -432,5 +432,69 @@ test('Now Playing: double-click toggles fullscreen and the pointer hides itself 
   await expect.poll(() => window.evaluate(() => document.fullscreenElement !== null)).toBe(true);
   await window.mouse.dblclick(660, 320);
   await expect.poll(() => window.evaluate(() => document.fullscreenElement !== null)).toBe(false);
+  await app.close();
+});
+
+
+/* ---------------------------------- v0.11.2 ---------------------------------- */
+
+test('tiles keep one size even with a very long title', async () => {
+  const long = 'An extremely long song title that keeps going and going and would stretch a shrink-wrapped button across the whole row';
+  fs.writeFileSync(path.join(box.music, 'Long - Title.wav'), artworkWavBytes(30, { title: long, artist: 'Someone With A Very Long Artist Name Too', album: 'Long', png: gradientPng(900, [30, 160, 90], [250, 240, 80]) }));
+  const { app, window } = await openApp(1);
+  for (const name of ['Alpha', 'An extremely long', 'Courtside']) {
+    await rowFor(window, name).hover();
+    await rowFor(window, name).getByTestId('row-heart').click();
+  }
+  await window.getByTestId('nav-home').click();
+  const tiles = window.getByTestId('home-favorites').getByTestId('favorite-tile');
+  await expect(tiles).toHaveCount(3, { timeout: 10_000 });
+  const widths = await tiles.evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().width)));
+  expect(new Set(widths).size).toBe(1);
+  expect(widths[0]).toBeLessThanOrEqual(200);
+  await app.close();
+});
+
+test('the heart bursts when a song becomes a favourite, not when it is removed; text cannot be selected', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').hover();
+  const heart = rowFor(window, 'Alpha').getByTestId('row-heart');
+  await heart.click();
+  await expect(heart.getByTestId('heart-burst')).toBeVisible();
+  await expect(heart).toHaveAttribute('aria-pressed', 'true');
+  expect(await window.evaluate(() => getComputedStyle(document.body).userSelect)).toBe('none');
+  await window.getByTestId('view-songs').dblclick({ position: { x: 5, y: 5 } }).catch(() => undefined);
+  expect(await window.evaluate(() => String(window.getSelection()))).toBe('');
+  await app.close();
+});
+
+test('hovering the seek bar shows a loudness + lyrics preview that goes away with the pointer', async () => {
+  placeLyrics(box, 'Karan - Courtside', 'basic.lrc');
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  const seek = window.getByTestId('player-seek');
+  const box1 = await seek.boundingBox();
+  await window.mouse.move((box1?.x ?? 0) + (box1?.width ?? 0) * 0.3, (box1?.y ?? 0) + 4);
+  await expect(window.getByTestId('seek-preview')).toBeVisible();
+  await expect(window.getByTestId('seek-preview-bars')).toHaveAttribute('data-ready', 'true', { timeout: 15_000 });
+  await window.mouse.move((box1?.x ?? 0) + (box1?.width ?? 0) * 0.7, (box1?.y ?? 0) + 4);
+  await expect(window.getByTestId('seek-preview')).toContainText(':');
+  await shot(window, '21-seek-preview');
+  await window.mouse.move(300, 200);
+  await expect(window.getByTestId('seek-preview')).toBeHidden();
+  await app.close();
+});
+
+test('the .lrc attach/remove control lives only in the player bar', async () => {
+  placeLyrics(box, 'Karan - Courtside', 'basic.lrc');
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await expect(window.getByTestId('player-bar').getByTestId('lyrics-attach-other')).toBeVisible({ timeout: 10_000 });
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await expect(window.getByTestId('now-playing')).toBeVisible();
+  await expect(window.getByTestId('now-playing').getByTestId('lyrics-attach-other')).toHaveCount(0);
+  await expect(window.getByTestId('now-playing').getByTestId('lyrics-attached-note')).toHaveCount(0);
   await app.close();
 });

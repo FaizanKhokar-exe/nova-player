@@ -23,13 +23,13 @@ export interface AudioLevels {
 export const SILENT_LEVELS: AudioLevels = { bass: 0, mid: 0, treble: 0, level: 0, beat: false, pulse: 0 };
 
 export interface BeatAnalyzerOptions {
-  /** Bass must be this many times its running average. Default 1.32. */
+  /** Bass must be this many times its running average. Default 1.16. */
   readonly sensitivity?: number;
-  /** Shortest time between two beats (ms). Default 210 (about 285 bpm). */
+  /** Shortest time between two beats (ms). Default 125 (up to 480 per minute). */
   readonly minGapMs?: number;
-  /** Bass below this (0..1) never counts as a beat. Default 0.18. */
+  /** Bass below this (0..1) never counts as a beat. Default 0.1. */
   readonly floor?: number;
-  /** Seconds-ish memory of the running average, in frames. Default 43 (about 0.7 s at 60 fps). */
+  /** Seconds-ish memory of the running average, in frames. Default 30 (about 0.5 s at 60 fps). */
   readonly averageFrames?: number;
 }
 
@@ -48,15 +48,16 @@ function bandAverage(bins: Uint8Array, binHz: number, fromHz: number, toHz: numb
 }
 
 export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnalyzer {
-  const sensitivity = options.sensitivity ?? 1.32;
-  const minGapMs = options.minGapMs ?? 210;
-  const floor = options.floor ?? 0.18;
-  const window = Math.max(2, options.averageFrames ?? 43);
+  const sensitivity = options.sensitivity ?? 1.16;
+  const minGapMs = options.minGapMs ?? 125;
+  const floor = options.floor ?? 0.1;
+  const window = Math.max(2, options.averageFrames ?? 30);
 
   let bass = 0;
   let mid = 0;
   let treble = 0;
   let average = 0;
+  let midAverage = 0;
   let pulse = 0;
   let lastBeatMs = -Infinity;
   let lastMs: number | undefined;
@@ -75,25 +76,29 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
 
       const dt = lastMs === undefined ? 16 : Math.max(0, Math.min(100, nowMs - lastMs));
       lastMs = nowMs;
-      pulse = Math.max(0, pulse - dt / 320);
+      pulse = Math.max(0, pulse - dt / 260);
 
       let beat = false;
       // The first frames only teach the average what this track sounds like; nothing can be "above" an average yet.
-      if (frames === 0) average = rawBass;
+      if (frames === 0) { average = rawBass; midAverage = rawMid; }
       frames += 1;
-      if (frames > 12 && average > 0 && rawBass >= floor && rawBass >= average * sensitivity && nowMs - lastBeatMs >= minGapMs) {
+      // A kick (bass) OR a snare / clap / hi-hat hit (mid band) counts, so busy tracks pulse far more often than a bass-only rule would.
+      const kick = rawBass >= floor && rawBass >= average * sensitivity;
+      const snare = rawMid >= floor * 1.4 && rawMid >= midAverage * (sensitivity + 0.12);
+      if (frames > 10 && average > 0 && (kick || snare) && nowMs - lastBeatMs >= minGapMs) {
         beat = true;
         lastBeatMs = nowMs;
         pulse = 1;
       }
       // Rises quickly (a new loud passage becomes the reference within a few frames), falls slowly.
-      average += (rawBass - average) / (rawBass > average ? 10 : window);
+      average += (rawBass - average) / (rawBass > average ? 8 : window);
+      midAverage += (rawMid - midAverage) / (rawMid > midAverage ? 8 : window);
 
       const level = Math.min(1, (bass * 1.2 + mid + treble * 0.8) / 3);
       return { bass, mid, treble, level, beat, pulse };
     },
     reset() {
-      bass = mid = treble = average = pulse = 0;
+      bass = mid = treble = average = midAverage = pulse = 0;
       lastBeatMs = -Infinity;
       lastMs = undefined;
       frames = 0;

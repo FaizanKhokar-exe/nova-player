@@ -1,3 +1,4 @@
+import { HeartButton } from './parts.js';
 import { useEffect, useRef } from 'react';
 import { useStore } from 'zustand';
 import { useNowPlaying } from '../nowplaying/NowPlayingStoreProvider.js';
@@ -6,7 +7,7 @@ import { usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { Icon, type IconName } from '../theme/Icon.js';
 import { ParticleField } from '../visuals/ParticleField.js';
 import { Spectrum } from '../visuals/Spectrum.js';
-import { Lyrics, LyricsBadge } from './Lyrics.js';
+import { Lyrics } from './Lyrics.js';
 import { SeekBar } from './SeekBar.js';
 import { usePrefs, useServices, useUi } from './services.js';
 import type { NowPlayingLayout } from './ui-store.js';
@@ -106,7 +107,6 @@ function NowPlayingLayer() {
         <div className="nx-np-left">
           <div className="nx-np-cover" data-testid="np-cover">
             <Artwork size="100%" title={track?.title} seed={track?.album ?? track?.title} />
-            <LyricsBadge />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
             <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -114,9 +114,7 @@ function NowPlayingLayer() {
               <span className="nx-np-artist nx-ellipsis nx-text" dir="auto" data-testid="np-artist">{track?.artist ?? ''}</span>
             </div>
             {track !== undefined && (
-              <button type="button" className="nx-icon-btn nx-heart" aria-pressed={favorite} aria-label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} onClick={() => void collections.getState().toggleFavorite(track.id)}>
-                <Icon name="heart" size={22} />
-              </button>
+              <HeartButton size={22} favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="np-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
             )}
           </div>
           <SeekBar stacked />
