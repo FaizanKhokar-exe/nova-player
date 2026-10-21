@@ -57,7 +57,7 @@ Configuration is `apps/desktop/electron-builder.yml`; the app identity is `appId
 `.github/workflows/windows-installer.yml` builds the installer on a real `windows-latest` runner and uploads **one file**,
 `Nova Player Setup <version>.exe`, as the workflow artifact `Nova-Player-Setup`. Push the repository to GitHub, open
 **Actions -> Windows installer -> Run workflow**, and download the artifact when it finishes (about 5-10 minutes). Pushing a
-tag such as `v0.11.2` also attaches the installer to a GitHub Release. The workflow runs typecheck, lint and unit tests first.
+tag such as `v0.11.3` also attaches the installer to a GitHub Release. The workflow runs typecheck, lint and unit tests first.
 The result is **unsigned** (SmartScreen warns; choose *More info -> Run anyway*) - no signing secret is configured, and
 adding one is a deliberate, separate step (see the signing notes below).
 
@@ -128,7 +128,7 @@ When reporting a release, say which of these was actually done:
    (set `NOVA_PACKAGED_EXECUTABLE` to test a different unpacked build). This is Linux-only here.
 3. **Installer built** - `dist:win` produced `Nova Player Setup <version>.exe` (record its size and SHA-256).
 4. **Installed and run on real Windows** - the only level that verifies the installer itself.
-   Not done for 0.11.2.
+   Not done for 0.11.3.
 
 Only level 4 supports a statement like "the Windows installer works".
 

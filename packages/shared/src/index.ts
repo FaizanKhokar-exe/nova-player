@@ -53,7 +53,7 @@ import type {
   ThumbnailDto,
   WallpaperDto,
 } from './collections-ipc.js';
-import type { ArtworkDto, AttachLyricsResultDto, DetachLyricsResultDto, LyricsDto, TrackRefRequest } from './track-detail-ipc.js';
+import type { ArtworkDto, AttachArtworkResultDto, AttachLyricsResultDto, DetachArtworkResultDto, DetachLyricsResultDto, LyricsDto, TrackRefRequest } from './track-detail-ipc.js';
 import type {
   EnqueueRequest,
   GetGroupRequest,
@@ -148,6 +148,10 @@ export interface PlaybackIpcContract {
   'track:attachLyrics': { request: TrackRefRequest; response: IpcResult<AttachLyricsResultDto> };
   /** Removes lyrics attached by hand. */
   'track:detachLyrics': { request: TrackRefRequest; response: IpcResult<DetachLyricsResultDto> };
+  /** Asks main to show a picture dialog and attach the chosen image to the track as its cover. */
+  'track:attachArtwork': { request: TrackRefRequest; response: IpcResult<AttachArtworkResultDto> };
+  /** Removes a cover attached by hand. */
+  'track:detachArtwork': { request: TrackRefRequest; response: IpcResult<DetachArtworkResultDto> };
 }
 
 export interface PingRequest {
@@ -255,6 +259,8 @@ export const IPC_INVOKE_CHANNELS = [
   'track:getArtwork',
   'track:attachLyrics',
   'track:detachLyrics',
+  'track:attachArtwork',
+  'track:detachArtwork',
   'favorites:list',
   'favorites:ids',
   'favorites:set',

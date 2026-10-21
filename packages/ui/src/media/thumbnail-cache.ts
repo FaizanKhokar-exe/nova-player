@@ -16,8 +16,12 @@ export interface ThumbnailCache {
   peek(trackId: string, size: ThumbnailSizeDto): ThumbnailState | undefined;
   /** Subscribes to the cover; `onResult` is called once (immediately if cached). Returns the unsubscribe. */
   want(trackId: string, size: ThumbnailSizeDto, onResult: (state: ThumbnailState) => void): () => void;
-  /** Forget everything (the library changed). */
+  /** Forget everything (the library changed, or a cover was attached by hand). Covers on screen start over. */
   clear(): void;
+  /** Increases every time `clear()` runs; on-screen covers use it to know they must ask again. */
+  revision(): number;
+  /** Calls `listener` after each `clear()`. Returns the unsubscribe. */
+  subscribe(listener: () => void): () => void;
 }
 
 export interface ThumbnailCacheOptions {
@@ -36,6 +40,7 @@ interface Job {
 const NONE: ThumbnailState = { status: 'none' };
 
 export function createThumbnailCache(bridge: NovaBridge, options: ThumbnailCacheOptions = {}): ThumbnailCache {
+  const listeners = new Set<() => void>();
   const concurrency = Math.max(1, options.concurrency ?? 4);
   const maxEntries = Math.max(16, options.maxEntries ?? 800);
   const cache = new Map<string, ThumbnailState>(); // insertion order = recency
@@ -123,8 +128,14 @@ export function createThumbnailCache(bridge: NovaBridge, options: ThumbnailCache
         owned.listeners.delete(onResult);
       };
     },
+    revision: () => generation,
+    subscribe(listener) {
+      listeners.add(listener);
+      return () => void listeners.delete(listener);
+    },
     clear() {
       generation += 1;
+      for (const listener of [...listeners]) listener();
       cache.clear();
       jobs.clear();
       waiting.length = 0;

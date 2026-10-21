@@ -69,6 +69,13 @@ win:
   #   codeSigningAccountName: "<account>"
   #   certificateProfileName: "<profile>"
 
+# "Open with" / double-click: Nova Player registers as a player for the audio types it can scan (Windows lets the user pick the default).
+fileAssociations:
+  - ext: [mp3, flac, ogg, oga, opus, m4a, aac, wav]
+    name: Audio file
+    description: Audio file
+    role: Viewer
+
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true

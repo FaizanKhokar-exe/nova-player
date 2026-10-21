@@ -18,6 +18,8 @@ export interface AppShell {
   readonly mediaKeys: MediaKeys;
   readonly notifier: TrackNotifier;
   dispatch(command: ShellCommand): boolean;
+  /** Tell the player to play one track (the user opened its file from the OS). */
+  openTrack(trackId: string): boolean;
 }
 
 export function createAppShell(dependencies: {
@@ -26,8 +28,9 @@ export function createAppShell(dependencies: {
   readonly mediaKeys: MediaKeys;
   readonly notifier: TrackNotifier;
   readonly dispatch: (command: ShellCommand) => boolean;
+  readonly openTrack: (trackId: string) => boolean;
 }): AppShell {
-  const { windows, tray, mediaKeys, notifier, dispatch } = dependencies;
+  const { windows, tray, mediaKeys, notifier, dispatch, openTrack } = dependencies;
   let started = false;
   let disposed = false;
 
@@ -37,6 +40,7 @@ export function createAppShell(dependencies: {
     mediaKeys,
     notifier,
     dispatch,
+    openTrack,
     start() {
       if (started || disposed) return;
       started = true;

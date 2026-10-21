@@ -35,6 +35,8 @@ export interface LyricsActionSlice {
 export interface ArtworkSlice {
   readonly status: NowPlayingArtworkStatus;
   readonly dataUrl: string | undefined;
+  /** `true` when the picture is one the listener attached by hand (it can be removed again). */
+  readonly custom?: boolean;
 }
 
 export interface NowPlayingState {
@@ -47,6 +49,12 @@ export interface NowPlayingState {
   connect(): () => void;
   /** Asks again for the current track's lyrics (the "Try again" button). */
   retryLyrics(): void;
+  /** Quietly re-reads the current track's lyrics and updates the screen only if they changed (the .lrc file was edited). No loading flicker. */
+  refreshLyrics(): Promise<void>;
+  /** Lets the listener pick a picture (the dialog is in main) to use as this track's cover. Resolves with a short plain-language outcome to show, or undefined. */
+  attachArtwork(): Promise<string | undefined>;
+  /** Removes a cover the listener attached. */
+  detachArtwork(): Promise<void>;
   /** Lets the listener pick a `.lrc` file (the dialog is in main) to use as this track's lyrics. */
   attachLyrics(): Promise<void>;
   /** Removes lyrics the listener attached, returning to the `.lrc` beside the track (if any). */
@@ -66,6 +74,13 @@ const ATTACH_MESSAGES = {
   'too-large': 'That file is too large to be a lyrics file (limit 1 MB).',
   unavailable: 'Lyrics can’t be attached right now - the track’s folder can’t be reached.',
 } as const;
+const ARTWORK_MESSAGES = {
+  cancelled: undefined,
+  'not-an-image': 'That file isn’t a JPEG, PNG or WebP picture.',
+  unreadable: 'That picture couldn’t be read.',
+  'too-large': 'That picture is too large (limit 5 MB).',
+  unavailable: 'A cover can’t be attached right now - the track’s folder can’t be reached.',
+} as const;
 const UNREACHABLE = 'Could not reach the application. Try restarting Nova Player.';
 
 export function createNowPlayingStore(bridge: NovaBridge, playback: PlaybackStoreApi): NowPlayingStoreApi {
@@ -76,7 +91,7 @@ export function createNowPlayingStore(bridge: NovaBridge, playback: PlaybackStor
   let lyricsKey: string | undefined;
   let artworkKey: string | undefined;
 
-  async function call(channel: 'track:getLyrics' | 'track:getArtwork' | 'track:attachLyrics' | 'track:detachLyrics', trackId: string): Promise<IpcResult<unknown> | undefined> {
+  async function call(channel: 'track:getLyrics' | 'track:getArtwork' | 'track:attachLyrics' | 'track:detachLyrics' | 'track:attachArtwork' | 'track:detachArtwork', trackId: string): Promise<IpcResult<unknown> | undefined> {
     try {
       return (await bridge.invoke(channel, { trackId })) as IpcResult<unknown>;
     } catch {
@@ -106,7 +121,7 @@ export function createNowPlayingStore(bridge: NovaBridge, playback: PlaybackStor
       if (sequence !== artworkSequence) return;
       if (result?.ok === true) {
         const value = result.value as ArtworkDto;
-        set({ artwork: value.status === 'found' && value.dataUrl !== undefined ? { status: 'found', dataUrl: value.dataUrl } : { status: 'none', dataUrl: undefined } });
+        set({ artwork: value.status === 'found' && value.dataUrl !== undefined ? { status: 'found', dataUrl: value.dataUrl, ...(value.custom === true && { custom: true }) } : { status: 'none', dataUrl: undefined } });
       } else {
         set({ artwork: { status: 'error', dataUrl: undefined } });
       }
@@ -126,8 +141,7 @@ export function createNowPlayingStore(bridge: NovaBridge, playback: PlaybackStor
         artworkKey = nextArtworkKey;
         artworkSequence += 1;
         if (track === undefined) set({ artwork: IDLE_ARTWORK });
-        else if (track.artwork === 'none') set({ artwork: { status: 'none', dataUrl: undefined } }); // nothing to ask for
-        else void loadArtwork(track.id);
+        else void loadArtwork(track.id); // always asked: a folder cover or a picture the listener attached may exist even when the file has none embedded
       }
     }
 
@@ -163,6 +177,37 @@ export function createNowPlayingStore(bridge: NovaBridge, playback: PlaybackStor
       retryLyrics() {
         const id = get().trackId;
         if (id !== undefined) void loadLyrics(id);
+      },
+
+      async refreshLyrics() {
+        const id = get().trackId;
+        if (id === undefined || get().lyrics.status !== 'ready') return;
+        const result = await call('track:getLyrics', id);
+        if (get().trackId !== id || result?.ok !== true) return;
+        const value = result.value as { status: LyricsStatusDto; lines: readonly LyricLineDto[]; attached?: true };
+        const current = get().lyrics;
+        const same = current.availability === value.status && current.attached === (value.attached === true) && current.lines.length === value.lines.length && current.lines.every((line, i) => line.timeMs === value.lines[i]?.timeMs && line.text === value.lines[i]?.text);
+        if (!same) set({ lyrics: { status: 'ready', availability: value.status, lines: value.lines, error: undefined, attached: value.attached === true } });
+      },
+
+      async attachArtwork() {
+        const id = get().trackId;
+        if (id === undefined) return undefined;
+        const result = await call('track:attachArtwork', id);
+        if (result?.ok !== true) return 'Couldn’t attach a picture right now. Try again.';
+        const outcome = (result.value as { outcome: keyof typeof ARTWORK_MESSAGES | 'attached' }).outcome;
+        if (outcome === 'attached') {
+          if (get().trackId === id) void loadArtwork(id);
+          return undefined;
+        }
+        return ARTWORK_MESSAGES[outcome];
+      },
+
+      async detachArtwork() {
+        const id = get().trackId;
+        if (id === undefined) return;
+        const result = await call('track:detachArtwork', id);
+        if (result?.ok === true && get().trackId === id) void loadArtwork(id);
       },
 
       async attachLyrics() {

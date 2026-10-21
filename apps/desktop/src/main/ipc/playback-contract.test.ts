@@ -33,6 +33,8 @@ describe('the playback IPC contract', () => {
       // Phase 10: attach a .lrc by hand (main shows the file dialog; the renderer never names a path) and remove it again
       'track:attachLyrics',
       'track:detachLyrics',
+      'track:attachArtwork',
+      'track:detachArtwork',
       // Phase 11: play a whole list (favourites / history / playlist) and cover thumbnails
       'playback:playList',
       'track:getThumbnail',

@@ -27,6 +27,7 @@ interface Harness {
   sidecarState: { lyrics: LyricsResult | Error; artwork: ArtworkResult | Error; attach: AttachLyricsResult | Error; detach: boolean };
   /** What the fake file dialog returns next (`undefined` = the listener cancelled) and how often it was opened. */
   dialog: { next: string | undefined; opened: number };
+  artworkChanged: { count: number };
 }
 
 function harness(): Harness {
@@ -83,8 +84,17 @@ function harness(): Harness {
       sidecarCalls.push(`detach:${id}`);
       return sidecarState.detach;
     },
+    attachArtworkFromFile: async (id: string, filePath: string) => {
+      sidecarCalls.push(`attachArt:${id}:${filePath}`);
+      return { outcome: 'attached' as const };
+    },
+    detachArtwork: async (id: string) => {
+      sidecarCalls.push(`detachArt:${id}`);
+      return true;
+    },
   };
-  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
+  const artworkChanged = { count: 0 };
+  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), pickArtworkFile: async () => (dialog.opened++, '/picked/cover.png'), onArtworkChanged: () => void (artworkChanged.count += 1), isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
   return {
     tracks,
     library,
@@ -95,6 +105,7 @@ function harness(): Harness {
     sidecarCalls,
     sidecarState,
     dialog,
+    artworkChanged,
     call: async (channel, request, event = TRUSTED) => (await handlers.get(channel)!(event, request)) as IpcResult<unknown>,
   };
 }
@@ -111,7 +122,7 @@ const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playb
 describe('registration', () => {
   it('registers exactly the playback channels in the contract, once each', () => {
     expect([...h.handlers.keys()].sort()).toEqual([...PLAYBACK_CHANNELS].sort());
-    expect(PLAYBACK_CHANNELS).toHaveLength(20); // 18 until Phase 10 added track:attachLyrics and track:detachLyrics
+    expect(PLAYBACK_CHANNELS).toHaveLength(22); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork
   });
 
   it('refuses every channel for an untrusted sender, before validating or running anything', async () => {
@@ -444,5 +455,29 @@ describe('Phase 10: track:attachLyrics and track:detachLyrics', () => {
   it('getLyrics marks attached lyrics (and only those) with attached: true', async () => {
     h.sidecarState.lyrics = { status: 'found', lines: [{ timeMs: 1, text: 'a' }], attached: true };
     expect(await h.call('track:getLyrics', { trackId: id() })).toEqual({ ok: true, value: { status: 'found', lines: [{ timeMs: 1, text: 'a' }], attached: true } });
+  });
+});
+
+describe('v0.11.3: track:attachArtwork and track:detachArtwork', () => {
+  const id = () => '123e4567-e89b-42d3-a456-426614174000';
+  it('shows main\'s own dialog, attaches the chosen picture, and tells the thumbnail cache', async () => {
+    expect(await h.call('track:attachArtwork', { trackId: id() })).toEqual({ ok: true, value: { outcome: 'attached' } });
+    expect(h.dialog.opened).toBe(1);
+    expect(h.sidecarCalls).toContain(`attachArt:${id()}:/picked/cover.png`);
+    expect(h.artworkChanged.count).toBe(1);
+  });
+  it('refuses an untrusted sender and a malformed request before any dialog opens', async () => {
+    for (const channel of ['track:attachArtwork', 'track:detachArtwork'] as const) {
+      expect(await h.call(channel, { trackId: id() }, { trusted: false })).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+      expect(await h.call(channel, { trackId: 5 })).toMatchObject({ ok: false });
+    }
+    expect(h.dialog.opened).toBe(0);
+  });
+  it('an unavailable folder never opens the dialog; removal reports and refreshes', async () => {
+    h.sidecarState.artwork = { status: 'unavailable' };
+    expect(await h.call('track:attachArtwork', { trackId: id() })).toEqual({ ok: true, value: { outcome: 'unavailable' } });
+    expect(h.dialog.opened).toBe(0);
+    expect(await h.call('track:detachArtwork', { trackId: id() })).toEqual({ ok: true, value: { removed: true } });
+    expect(h.artworkChanged.count).toBe(1);
   });
 });

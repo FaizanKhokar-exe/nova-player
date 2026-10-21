@@ -1,4 +1,5 @@
 import { attachedLyricsMigration } from './attached-lyrics-schema.js';
+import { customMediaMigration } from './custom-media-schema.js';
 import { collectionsMigration } from './collections-schema.js';
 import { initialSchemaMigration } from './initial-schema.js';
 import { libraryRootsMigration } from './library-roots-schema.js';
@@ -17,4 +18,5 @@ export const MIGRATIONS: readonly Migration[] = [
   playbackSessionMigration,
   attachedLyricsMigration,
   collectionsMigration,
+  customMediaMigration,
 ];

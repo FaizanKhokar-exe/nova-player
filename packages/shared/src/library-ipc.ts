@@ -282,9 +282,10 @@ export interface LibraryChangedEvent {
 export type ShellCommand = 'toggle-play' | 'next' | 'previous';
 export const SHELL_COMMANDS = ['toggle-play', 'next', 'previous'] as const satisfies readonly ShellCommand[];
 
-export interface ShellCommandEvent {
-  readonly command: ShellCommand;
-}
+export type ShellCommandEvent =
+  | { readonly command: ShellCommand }
+  /** v0.11.3: the user opened an audio file with Nova Player (double-click / "Open with"). Main found (or added) it in the library and names its track; the renderer plays it like a click. */
+  | { readonly command: 'play-track'; readonly trackId: string };
 
 /** Channel name -> payload. Events are one-way notifications; there is no reply. */
 export interface IpcEventContract {

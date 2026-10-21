@@ -20,7 +20,7 @@ function thumbnails(answer: ThumbnailState | undefined): ThumbnailCache & { want
     if (answer !== undefined) onResult(answer);
     return () => undefined;
   });
-  return { peek: () => undefined, want, clear: () => undefined } as ThumbnailCache & { want: ReturnType<typeof vi.fn> };
+  return { peek: () => undefined, want, clear: () => undefined, revision: () => 0, subscribe: () => () => undefined } as ThumbnailCache & { want: ReturnType<typeof vi.fn> };
 }
 
 const withServices = (services: Partial<AppServices>, ui: React.ReactNode) => <ServicesProvider services={services as AppServices}>{ui}</ServicesProvider>;

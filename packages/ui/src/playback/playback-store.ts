@@ -478,7 +478,8 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
         // same store actions as the on-screen buttons (so Next/Previous still go through main's
         // queue rules with the real position, and Previous keeps the restart threshold).
         bridge.subscribe('shell:command', (event) => {
-          if (event.command === 'toggle-play') get().togglePlay();
+          if (event.command === 'play-track') void get().playTrack(event.trackId);
+          else if (event.command === 'toggle-play') get().togglePlay();
           else if (event.command === 'next') void get().next();
           else if (event.command === 'previous') void get().previous();
         }),

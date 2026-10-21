@@ -54,4 +54,16 @@ export interface ArtworkDto {
   readonly status: ArtworkStatusDto;
   /** `found` only: a `data:image/...;base64,...` URL (the image bytes never touch a file path). */
   readonly dataUrl?: string;
+  /** `true` when this is a picture the listener attached by hand (so it can be removed again); absent otherwise. */
+  readonly custom?: true;
+}
+
+/**
+ * What came of `track:attachArtwork` (main shows the picture dialog; the renderer never names a path):
+ *  `attached`, `cancelled`, `not-an-image` (not JPEG / PNG / WebP by content), `unreadable`, `too-large` (over 5 MiB), `unavailable`.
+ */
+export type AttachArtworkResultDto = { readonly outcome: 'attached' | 'cancelled' | 'not-an-image' | 'unreadable' | 'too-large' | 'unavailable' };
+
+export interface DetachArtworkResultDto {
+  readonly removed: boolean;
 }

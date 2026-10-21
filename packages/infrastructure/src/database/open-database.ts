@@ -58,6 +58,8 @@ export function openDatabase(options: OpenDatabaseOptions): NovaDatabase {
       // synchronous=NORMAL is the recommended durability/speed trade-off.
       connection.pragma('journal_mode = WAL');
       connection.pragma('synchronous = NORMAL');
+      connection.pragma('temp_store = MEMORY'); // v0.11.3: sorting / grouping big libraries uses RAM, not temp files
+      connection.pragma('cache_size = -20000'); // ~20 MB page cache (default is ~2 MB)
     }
 
     runMigrations(connection, options.migrations ?? MIGRATIONS);

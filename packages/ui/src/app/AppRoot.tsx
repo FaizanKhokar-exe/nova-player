@@ -71,7 +71,7 @@ const isTyping = (target: EventTarget | null): boolean => {
 
 /** Global effects: engine + visuals follow playback, preferences, shortcuts. Renders nothing. */
 function AppEffects() {
-  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs } = useServices();
+  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs, nowPlaying } = useServices();
   const playing = usePlaybackStore((s) => s.engine.playing);
   const performance = usePrefs((s) => s.performance);
 
@@ -137,6 +137,13 @@ function AppEffects() {
     return () => window.removeEventListener('keydown', onKey);
   }, [ui, playback, prefs, collections]);
 
+  // The .lrc may be edited in another program: when the window comes back to the front, the lyrics are re-read (silently, only if they changed).
+  useEffect(() => {
+    const refresh = () => void nowPlaying.getState().refreshLyrics();
+    window.addEventListener('focus', refresh);
+    return () => window.removeEventListener('focus', refresh);
+  }, [nowPlaying]);
+
   // Double-click on empty window space toggles fullscreen.
   useEffect(() => {
     const onDouble = (event: MouseEvent) => {
@@ -153,7 +160,12 @@ function AppEffects() {
   useEffect(() => {
     const root = document.documentElement;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const show = () => {
+    let lastReset = 0;
+    const show = (event?: Event) => {
+      // Mouse moves arrive hundreds of times a second: re-arm the timer at most every 150 ms (and always when the pointer was hidden).
+      const at = Date.now();
+      if (event?.type === 'mousemove' && root.dataset.idle !== 'true' && at - lastReset < 150) return;
+      lastReset = at;
       root.dataset.idle = 'false';
       if (timer !== undefined) clearTimeout(timer);
       if (npOpen || document.fullscreenElement !== null) timer = setTimeout(() => { root.dataset.idle = 'true'; }, IDLE_CURSOR_MS);

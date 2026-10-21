@@ -31,6 +31,10 @@ export interface PlaybackIpcDependencies {
   readonly sidecars: TrackSidecars;
   /** The native "choose a lyrics file" dialog: the chosen path, or `undefined` when the listener cancelled. The renderer never supplies a path. */
   readonly pickLyricsFile: () => Promise<string | undefined>;
+  /** The native "choose a picture" dialog for a track's cover (v0.11.3): the chosen path, or `undefined` when cancelled. */
+  readonly pickArtworkFile: () => Promise<string | undefined>;
+  /** A track's cover was attached or removed: cached thumbnails must forget which tracks have covers. */
+  readonly onArtworkChanged: () => void;
   /** Whether a call came from the application's own window. */
   readonly isTrustedSender: (event: unknown) => boolean;
   /** Where unexpected errors go (the main-process log). Never the renderer. */
@@ -47,7 +51,7 @@ type Value<K extends PlaybackChannel> = Extract<PlaybackIpcContract[K]['response
  * the domain, behind `PlaybackApplication`.
  */
 export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void {
-  const { registrar, application, sidecars, pickLyricsFile, isTrustedSender, log } = dependencies;
+  const { registrar, application, sidecars, pickLyricsFile, pickArtworkFile, onArtworkChanged, isTrustedSender, log } = dependencies;
 
   function register<K extends PlaybackChannel, R>(
     channel: K,
@@ -131,7 +135,24 @@ export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void
   register('track:getArtwork', validateTrackRef, async ({ trackId }) => {
     const result = await sidecars.getArtwork(trackId);
     if (result.status !== 'found') return { status: result.status };
-    return { status: 'found', dataUrl: `data:${result.mimeType};base64,${Buffer.from(result.bytes).toString('base64')}` };
+    return { status: 'found', dataUrl: `data:${result.mimeType};base64,${Buffer.from(result.bytes).toString('base64')}`, ...(result.custom === true && { custom: true as const }) };
+  });
+
+  // Attach a cover picture by hand (v0.11.3). Same order as lyrics: the track is checked BEFORE the dialog opens; the dialog is main's own.
+  register('track:attachArtwork', validateTrackRef, async ({ trackId }) => {
+    const known = await sidecars.getArtwork(trackId); // throws invalid-id / track-not-found before any dialog
+    if (known.status === 'unavailable') return { outcome: 'unavailable' };
+    const filePath = await pickArtworkFile();
+    if (filePath === undefined) return { outcome: 'cancelled' };
+    const result = await sidecars.attachArtworkFromFile(trackId, filePath);
+    if (result.outcome === 'attached') onArtworkChanged();
+    return { outcome: result.outcome };
+  });
+
+  register('track:detachArtwork', validateTrackRef, async ({ trackId }) => {
+    const removed = await sidecars.detachArtwork(trackId);
+    if (removed) onArtworkChanged();
+    return { removed };
   });
 
   register('playback:diagnoseSource', validateDiagnoseSource, async (request) => {

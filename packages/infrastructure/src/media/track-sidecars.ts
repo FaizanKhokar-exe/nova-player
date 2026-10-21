@@ -55,9 +55,21 @@ export type AttachLyricsResult =
 /** Where lyrics attached by hand are kept (the SQLite repository in the app; a fake in tests). */
 export interface AttachedLyricsStore {
   get(trackId: string): string | undefined;
-  set(trackId: string, lrcText: string): void;
+  /** `sourcePath` (main-only) is the file the text was read from, so later edits to it can be picked up. */
+  set(trackId: string, lrcText: string, sourcePath?: string): void;
+  delete(trackId: string): boolean;
+  /** Where the attached text came from, when known. Optional so older stores / fakes keep working. */
+  getSource?(trackId: string): string | undefined;
+}
+
+/** Pictures attached by hand (stored in the database). Optional: without it only embedded and folder covers are used. */
+export interface CustomCoverStore {
+  get(trackId: string): { readonly mimeType: string; readonly bytes: Uint8Array } | undefined;
+  set(trackId: string, mimeType: string, bytes: Uint8Array): void;
   delete(trackId: string): boolean;
 }
+
+export type AttachArtworkResult = { readonly outcome: 'attached' } | { readonly outcome: 'not-an-image' | 'unreadable' | 'too-large' | 'unavailable' };
 
 /**
  * Decodes the bytes of a lyrics file the way real-world `.lrc` files need: UTF-8 (with or without a BOM),
@@ -77,7 +89,7 @@ export function decodeLyricsBytes(bytes: Uint8Array): string {
 }
 
 export type ArtworkResult =
-  | { readonly status: 'found'; readonly mimeType: string; readonly bytes: Uint8Array }
+  | { readonly status: 'found'; readonly mimeType: string; readonly bytes: Uint8Array; /** True when this is a picture the listener attached by hand (it can be removed again). */ readonly custom?: true }
   | { readonly status: 'none' | 'unavailable' };
 
 export class TrackSidecarError extends Error {
@@ -101,6 +113,10 @@ export interface TrackSidecars {
   attachLyricsFromFile(trackId: string, filePath: string): Promise<AttachLyricsResult>;
   /** Removes lyrics attached by hand (the sidecar file, if any, shows again). `true` when one was removed. */
   detachLyrics(trackId: string): Promise<boolean>;
+  /** Attaches the picture at `filePath` (chosen in a dialog by main) as this track's cover. @throws TrackSidecarError `invalid-id` | `track-not-found`. */
+  attachArtworkFromFile(trackId: string, filePath: string): Promise<AttachArtworkResult>;
+  /** Removes a picture attached by hand (embedded / folder covers show again). `true` when one was removed. */
+  detachArtwork(trackId: string): Promise<boolean>;
 }
 
 export interface TrackSidecarsDependencies {
@@ -113,6 +129,8 @@ export interface TrackSidecarsDependencies {
   readonly readEmbeddedArtwork: (path: string) => Promise<{ readonly mimeType: string; readonly data: Uint8Array } | undefined>;
   /** Lyrics attached by hand. Without it (older callers, tests) only sidecar files are used. */
   readonly attachedLyrics?: AttachedLyricsStore;
+  /** Pictures attached by hand. */
+  readonly customCovers?: CustomCoverStore;
 }
 
 function stripExtension(filePath: string): string {
@@ -130,7 +148,7 @@ function inside(root: string, candidate: string): boolean {
 }
 
 export function createTrackSidecars(dependencies: TrackSidecarsDependencies): TrackSidecars {
-  const { mediaAccess, libraryRootRepository, fileSystem, readFile, readEmbeddedArtwork, attachedLyrics } = dependencies;
+  const { mediaAccess, libraryRootRepository, fileSystem, readFile, readEmbeddedArtwork, attachedLyrics, customCovers } = dependencies;
 
   async function resolve(rawId: string): Promise<{ filePath: CanonicalPath; realRoot: string } | 'unavailable'> {
     if (typeof rawId !== 'string' || parseTrackId(rawId) === undefined) throw new TrackSidecarError('invalid-id', 'That is not a valid track id.');
@@ -187,8 +205,26 @@ export function createTrackSidecars(dependencies: TrackSidecarsDependencies): Tr
 
       // Lyrics the listener attached by hand win over a sidecar file. A stored text that no longer parses
       // (it was valid when attached, so this is only a damaged row) is ignored rather than hiding the sidecar.
-      const attached = attachedLyrics?.get(rawId);
+      let attached = attachedLyrics?.get(rawId);
       if (attached !== undefined) {
+        // v0.11.3: if the file the lyrics were attached from still exists and has changed, the NEW text is used (and stored).
+        // When it is gone or unreadable, or now has no timed lines, the stored copy keeps working.
+        const source = attachedLyrics?.getSource?.(rawId);
+        if (source !== undefined) {
+          try {
+            const real = await fileSystem.realPath(source);
+            const stats = await fileSystem.statFile(real);
+            if (stats.sizeBytes <= MAX_LYRICS_BYTES) {
+              const fresh = decodeLyricsBytes(await readFile(real, MAX_LYRICS_BYTES));
+              if (fresh !== attached && parseLyrics(fresh).lines.length > 0) {
+                attachedLyrics?.set(rawId, fresh, source);
+                attached = fresh;
+              }
+            }
+          } catch {
+            // the source moved or cannot be read: keep the stored copy
+          }
+        }
         const parsedAttached = parseLyrics(attached);
         if (parsedAttached.lines.length > 0) return { status: 'found', lines: parsedAttached.lines, attached: true };
       }
@@ -207,7 +243,7 @@ export function createTrackSidecars(dependencies: TrackSidecarsDependencies): Tr
           const stats = await fileSystem.statFile(real);
           if (stats.sizeBytes > MAX_LYRICS_BYTES) return { status: 'unreadable', lines: [] };
           const bytes = await readFile(real, MAX_LYRICS_BYTES);
-          const parsed = parseLyrics(new TextDecoder('utf-8').decode(bytes));
+          const parsed = parseLyrics(decodeLyricsBytes(bytes));
           return parsed.lines.length === 0 ? { status: 'empty', lines: [] } : { status: 'found', lines: parsed.lines };
         } catch (error) {
           if (error instanceof FileSystemError && error.code === 'not-found') continue;
@@ -233,7 +269,7 @@ export function createTrackSidecars(dependencies: TrackSidecarsDependencies): Tr
       const text = decodeLyricsBytes(bytes);
       const parsed = parseLyrics(text);
       if (parsed.lines.length === 0) return { outcome: 'empty' };
-      attachedLyrics.set(rawId, text);
+      attachedLyrics.set(rawId, text, filePath);
       return { outcome: 'attached', lines: parsed.lines };
     },
 
@@ -242,9 +278,34 @@ export function createTrackSidecars(dependencies: TrackSidecarsDependencies): Tr
       return attachedLyrics?.delete(rawId) ?? false;
     },
 
+    async attachArtworkFromFile(rawId, filePath) {
+      const located = await resolve(rawId); // throws for an invalid or unknown track
+      if (located === 'unavailable' || customCovers === undefined) return { outcome: 'unavailable' };
+      let bytes: Uint8Array;
+      try {
+        const real = await fileSystem.realPath(filePath);
+        const stats = await fileSystem.statFile(real);
+        if (stats.sizeBytes > MAX_ARTWORK_BYTES) return { outcome: 'too-large' };
+        bytes = await readFile(real, MAX_ARTWORK_BYTES);
+      } catch {
+        return { outcome: 'unreadable' };
+      }
+      const mimeType = sniffImageType(bytes);
+      if (mimeType === undefined) return { outcome: 'not-an-image' };
+      customCovers.set(rawId, mimeType, bytes);
+      return { outcome: 'attached' };
+    },
+
+    async detachArtwork(rawId) {
+      if (typeof rawId !== 'string' || parseTrackId(rawId) === undefined) throw new TrackSidecarError('invalid-id', 'That is not a valid track id.');
+      return customCovers?.delete(rawId) ?? false;
+    },
+
     async getArtwork(rawId) {
       const located = await resolve(rawId);
       if (located === 'unavailable') return { status: 'unavailable' };
+      const custom = customCovers?.get(rawId);
+      if (custom !== undefined) return { status: 'found', mimeType: custom.mimeType, bytes: custom.bytes, custom: true };
       try {
         const picture = await readEmbeddedArtwork(located.filePath);
         if (picture !== undefined && picture.data.byteLength > 0 && picture.data.byteLength <= MAX_ARTWORK_BYTES) {

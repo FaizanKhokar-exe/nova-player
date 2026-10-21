@@ -52,7 +52,7 @@ describe('migration 6 (collections)', () => {
       old.close();
       const upgraded = openDatabase({ filePath: file });
       try {
-        expect(upgraded.getSchemaVersion()).toBe(6);
+        expect(upgraded.getSchemaVersion()).toBe(MIGRATIONS.length); // v0.11.3: later migrations apply too (was a literal 6)
         new SqliteFavoritesRepository(upgraded).add(record.track.id);
         expect(new SqliteFavoritesRepository(upgraded).listIds()).toEqual([record.track.id]);
       } finally {

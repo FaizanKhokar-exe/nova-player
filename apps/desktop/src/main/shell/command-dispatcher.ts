@@ -28,3 +28,21 @@ export function createCommandDispatcher(options: {
     }
   };
 }
+
+/** Tells the player to play one named track (the user opened its file from the OS). Same path as the other commands: a typed event to the renderer. */
+export function createTrackOpenDispatcher(options: {
+  readonly target: () => CommandTarget | undefined;
+  readonly log: (message: string, error: unknown) => void;
+}): (trackId: string) => boolean {
+  return (trackId) => {
+    const target = options.target();
+    if (target === undefined || target.isDestroyed()) return false;
+    try {
+      target.send('shell:command', { command: 'play-track', trackId });
+      return true;
+    } catch (error) {
+      options.log('[nova] could not tell the player to open the track:', error);
+      return false;
+    }
+  };
+}

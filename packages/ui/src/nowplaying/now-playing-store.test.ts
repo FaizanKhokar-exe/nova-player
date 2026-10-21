@@ -46,12 +46,12 @@ describe('following the current track', () => {
     expect(m.calls('track:getArtwork')).toEqual([{ trackId: T[0]!.id }]);
   });
 
-  it('a track with no artwork never asks main for it; lyrics "none" is a normal ready state', async () => {
+  it('a track whose file has no embedded picture is still asked about (v0.11.3: a folder cover or a hand-attached picture may exist); "none" is a normal answer', async () => {
     await play(1);
     const s = m.nowPlaying.getState();
     expect(s.artwork).toEqual({ status: 'none', dataUrl: undefined });
     expect(s.lyrics).toMatchObject({ status: 'ready', availability: 'none', lines: [] });
-    expect(m.calls('track:getArtwork')).toEqual([]);
+    expect(m.calls('track:getArtwork')).toEqual([{ trackId: T[1]!.id }]);
   });
 
   it('switching tracks drops the previous lyrics and artwork at once, then loads the new ones', async () => {

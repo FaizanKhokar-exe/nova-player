@@ -5,6 +5,7 @@ import { createNodeFileSystem } from '../filesystem/node-file-system.js';
 import type { FileSystem } from '../filesystem/file-system.js';
 import { createMusicMetadataReader, type MetadataReader } from '../metadata/music-metadata-reader.js';
 import { SqliteAttachedLyricsRepository } from '../repositories/sqlite-attached-lyrics-repository.js';
+import { SqliteCustomCoverRepository } from '../repositories/sqlite-custom-cover-repository.js';
 import { SqliteFavoritesRepository } from '../repositories/sqlite-favorites-repository.js';
 import { SqliteHistoryRepository } from '../repositories/sqlite-history-repository.js';
 import { SqlitePlaylistRepository } from '../repositories/sqlite-playlist-repository.js';
@@ -52,6 +53,7 @@ export interface LibraryServices {
   readonly playbackSessionRepository: PlaybackSessionRepository;
   /** Lyrics the listener attached to tracks by hand (migration 5). */
   readonly attachedLyricsRepository: SqliteAttachedLyricsRepository;
+  readonly customCoverRepository: SqliteCustomCoverRepository;
   /** Favourites, recently played and playlists (migration 6). */
   readonly favoritesRepository: SqliteFavoritesRepository;
   readonly historyRepository: SqliteHistoryRepository;
@@ -91,6 +93,7 @@ export function createLibraryServices(options: LibraryServicesOptions): LibraryS
     const libraryRootRepository = new SqliteLibraryRootRepository(database);
     const playbackSessionRepository = new SqlitePlaybackSessionRepository(database);
     const attachedLyricsRepository = new SqliteAttachedLyricsRepository(database);
+    const customCoverRepository = new SqliteCustomCoverRepository(database);
     const favoritesRepository = new SqliteFavoritesRepository(database);
     const historyRepository = new SqliteHistoryRepository(database);
     const playlistRepository = new SqlitePlaylistRepository(database, { limits: PLAYLIST_LIMITS });
@@ -122,6 +125,7 @@ export function createLibraryServices(options: LibraryServicesOptions): LibraryS
       libraryRootRepository,
       playbackSessionRepository,
       attachedLyricsRepository,
+      customCoverRepository,
       favoritesRepository,
       historyRepository,
       playlistRepository,

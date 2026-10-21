@@ -5,7 +5,7 @@ import { is } from '@electron-toolkit/utils';
 import type { PlaybackApplication } from '@nova/infrastructure';
 import { createAppShell, type AppShell } from './app-shell.js';
 import { resolveAppLocation } from './app-location.js';
-import { createCommandDispatcher } from './command-dispatcher.js';
+import { createCommandDispatcher, createTrackOpenDispatcher } from './command-dispatcher.js';
 import { createMediaKeys } from './media-keys.js';
 import { createShellStateStore, WINDOW_MIN_HEIGHT, WINDOW_MIN_WIDTH, type ShellStateFileIo, type WindowState } from './shell-state.js';
 import { createTrackNotifier, type NotificationPort } from './track-notifier.js';
@@ -164,6 +164,13 @@ export function createElectronShell(options: ElectronShellOptions): AppShell {
     },
     log,
   });
+  const openTrack = createTrackOpenDispatcher({
+    target: () => {
+      const window = windows.current() as BrowserWindow | undefined;
+      return window === undefined ? undefined : { isDestroyed: () => window.isDestroyed() || window.webContents.isDestroyed(), send: (channel, payload) => window.webContents.send(channel, payload) };
+    },
+    log,
+  });
   const mediaKeys = createMediaKeys({
     globalShortcut: {
       register: (accelerator, callback) => globalShortcut.register(accelerator, callback),
@@ -183,6 +190,6 @@ export function createElectronShell(options: ElectronShellOptions): AppShell {
     onClick: () => appShell.show(),
     log,
   });
-  const appShell: AppShell = createAppShell({ windows, tray, mediaKeys, notifier, dispatch });
+  const appShell: AppShell = createAppShell({ windows, tray, mediaKeys, notifier, dispatch, openTrack });
   return appShell;
 }

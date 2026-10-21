@@ -52,16 +52,21 @@ function NowPlayingLayer() {
   // Make sure the audio graph exists while a visual is on screen.
   useEffect(() => audioControls.getState().activateEngine(), [audioControls]);
 
-  // The beat pulse: one CSS variable on this layer, driven by the shared visual bus (nothing else re-renders).
+  // The beat pulse: driven by the shared visual bus. The variable is set ONLY on the two elements that use it (the cover and the glow),
+  // not on the whole screen: a custom property changed on the root makes the browser re-resolve the style of every lyric line, every frame.
   useEffect(() => {
     const element = root.current;
     if (element === null || reduceMotion) return;
-    const off = visuals.subscribe((frame) => element.style.setProperty('--beat', frame.levels.pulse.toFixed(3)));
+    const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover, .nx-np-pulse'));
+    const off = visuals.subscribe((frame) => {
+      const value = frame.levels.pulse.toFixed(3);
+      for (const target of targets) target.style.setProperty('--beat', value);
+    });
     return () => {
       off();
-      element.style.setProperty('--beat', '0');
+      for (const target of targets) target.style.setProperty('--beat', '0');
     };
-  }, [visuals, reduceMotion]);
+  }, [visuals, reduceMotion, layout, backdrop]);
 
   const showLyrics = layout !== 'art';
   const particles = layout === 'lyrics' && backdrop === 'particles';

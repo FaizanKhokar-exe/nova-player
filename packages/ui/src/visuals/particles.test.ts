@@ -55,3 +55,18 @@ describe('particles', () => {
     expect([...p.x].every(Number.isFinite)).toBe(true);
   });
 });
+
+describe('v0.11.3: frequent beats keep the particles on screen', () => {
+  it('after hundreds of beats nothing is outside the width, and nothing exceeds the speed cap', async () => {
+    const { createParticles, stepParticles, MAX_PARTICLE_SPEED } = await import('./particles.js');
+    const system = createParticles(180, 800, 500);
+    for (let frame = 0; frame < 900; frame += 1) {
+      stepParticles(system, { dt: 1 / 60, level: 0.9, pulse: 1, beat: frame % 8 === 0, width: 800, height: 500 });
+      for (let i = 0; i < system.count; i += 1) {
+        expect(system.x[i]).toBeGreaterThanOrEqual(-8);
+        expect(system.x[i]).toBeLessThanOrEqual(808);
+        expect(Math.hypot(system.vx[i] as number, system.vy[i] as number)).toBeLessThanOrEqual(MAX_PARTICLE_SPEED + 1e-3);
+      }
+    }
+  });
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { ThumbnailSizeDto } from '@nova/shared';
 import { GeneratedCover } from '../theme/GeneratedCover.js';
 import type { ThumbnailState } from '../media/thumbnail-cache.js';
@@ -13,8 +13,11 @@ import { useServices } from './services.js';
 type CoverProps = { trackId: string | undefined; seed: string; size?: ThumbnailSizeDto; round?: boolean; className?: string; label?: string };
 
 export function Cover(props: CoverProps) {
+  const { thumbnails } = useServices();
+  // A cover attached by hand (or a library change) clears the cache: every cover on screen asks again.
+  const revision = useSyncExternalStore(thumbnails.subscribe, thumbnails.revision);
   // Keyed by what is shown, so a recycled row starts fresh instead of resetting state inside an effect.
-  return <CoverInner key={`${props.trackId ?? ''}|${props.size ?? 'sm'}`} {...props} />;
+  return <CoverInner key={`${props.trackId ?? ''}|${props.size ?? 'sm'}|${revision}`} {...props} />;
 }
 
 function CoverInner({ trackId, seed, size = 'sm', round = false, className, label }: CoverProps) {

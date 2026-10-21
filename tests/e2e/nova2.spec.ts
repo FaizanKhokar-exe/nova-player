@@ -498,3 +498,67 @@ test('the .lrc attach/remove control lives only in the player bar', async () => 
   await expect(window.getByTestId('now-playing').getByTestId('lyrics-attached-note')).toHaveCount(0);
   await app.close();
 });
+
+
+/* ---------------------------------- v0.11.3 ---------------------------------- */
+
+test('opening an audio file with Nova Player (a launch argument) plays that song - already in the library', async () => {
+  const first = await openApp();
+  await first.app.close();
+  const target = path.join(box.music, 'Charlie.wav');
+  const files = fs.readdirSync(box.music);
+  const file = files.find((name) => name.toLowerCase().includes('charlie')) ?? files[0] ?? '';
+  const second = await launchApp({ userDataDir: box.userData, extraArgs: [path.join(box.music, file)] });
+  await expect(second.window.getByTestId('player-title')).toHaveText(/Charlie|Alpha|Bravo|Delta|Echo|Foxtrot|Courtside/, { timeout: 20_000 });
+  await waitPlaying(second.window);
+  expect(target.length).toBeGreaterThan(0);
+  await second.app.close();
+});
+
+test('opening a file from a folder that is not in the library adds the folder, scans it and plays the song', async () => {
+  const other = path.join(box.sandbox, 'Downloads');
+  fs.mkdirSync(other, { recursive: true });
+  fs.writeFileSync(path.join(other, 'Zulu Song.wav'), artworkWavBytes(20, { title: 'Zulu Song', artist: 'Zed', album: 'Z' }));
+  const { app, window } = await launchApp({ userDataDir: box.userData, extraArgs: [path.join(other, 'Zulu Song.wav')] });
+  await expect(window.getByTestId('player-title')).toHaveText('Zulu Song', { timeout: 30_000 });
+  await waitPlaying(window);
+  await window.getByTestId('nav-songs').click();
+  await expect(window.getByTestId('track-row')).toHaveCount(1);
+  await app.close();
+});
+
+test('a cover picture can be attached from the player bar, shows at once, and can be removed', async () => {
+  const picture = path.join(box.sandbox, 'mine.png');
+  fs.writeFileSync(picture, gradientPng(300, [20, 200, 120], [250, 250, 40]));
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await expect(window.getByTestId('player-bar').getByTestId('cover')).toHaveAttribute('data-state', /fallback|loading/);
+  await pickFolders(app, picture);
+  await window.getByTestId('player-cover-menu').click();
+  await window.getByRole('menuitem', { name: /Choose a cover picture/ }).click();
+  await expect(window.getByTestId('player-bar').getByTestId('cover')).toHaveAttribute('data-state', 'image', { timeout: 10_000 });
+  await expect(rowFor(window, 'Alpha').getByTestId('cover')).toHaveAttribute('data-state', 'image', { timeout: 10_000 });
+  await window.getByTestId('player-cover-menu').click();
+  await window.getByRole('menuitem', { name: /Remove my cover picture/ }).click();
+  await expect(window.getByTestId('player-bar').getByTestId('cover')).toHaveAttribute('data-state', /fallback|loading/, { timeout: 10_000 });
+  await app.close();
+});
+
+test('lyrics attached from a file follow edits to that file when the window comes back to the front', async () => {
+  placeLyrics(box, 'Karan - Courtside', 'basic.lrc');
+  const mine = path.join(box.sandbox, 'mine.lrc');
+  fs.writeFileSync(mine, '[00:01.00]first version\n[00:05.00]second line\n');
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await pickFolders(app, mine);
+  await window.getByTestId('player-bar').getByTestId('lyrics-attach-other').click({ timeout: 15_000 });
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await expect(window.getByTestId('lyric-line').first()).toHaveText('first version', { timeout: 10_000 });
+  fs.writeFileSync(mine, '[00:01.00]EDITED version\n[00:05.00]second line\n[00:09.00]third line\n');
+  await window.evaluate(() => window.dispatchEvent(new Event('focus')));
+  await expect(window.getByTestId('lyric-line').first()).toHaveText('EDITED version', { timeout: 10_000 });
+  await expect(window.getByTestId('lyric-line')).toHaveCount(3);
+  await app.close();
+});

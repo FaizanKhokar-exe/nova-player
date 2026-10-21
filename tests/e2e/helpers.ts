@@ -20,7 +20,7 @@ export const mainEntryPath = path.join(desktopRoot, 'out/main/index.js');
  * packaged, signed installer run by a real user on real Windows does not
  * need and will not carry these flags.
  */
-export async function launchApp(options: { userDataDir?: string; startupSync?: boolean } = {}): Promise<{ app: ElectronApplication; window: Page }> {
+export async function launchApp(options: { userDataDir?: string; startupSync?: boolean; extraArgs?: string[] } = {}): Promise<{ app: ElectronApplication; window: Page }> {
   // Phase 5 starts watching + one reconciliation scan at launch (see `LibraryApplication.startup`).
   // The Phase 0-4 specs drive scanning by hand and assert exact states, so they launch with the
   // documented test hook `NOVA_STARTUP_SYNC=off`; the Phase 5 startup specs pass `startupSync: true`
@@ -40,6 +40,7 @@ export async function launchApp(options: { userDataDir?: string; startupSync?: b
       '--disable-dev-shm-usage',
       // Keeps the real app's database out of the developer's own profile.
       ...(options.userDataDir !== undefined ? [`--user-data-dir=${options.userDataDir}`] : []),
+      ...(options.extraArgs ?? []),
     ],
   });
   const window = await app.firstWindow();

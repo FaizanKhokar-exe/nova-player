@@ -115,7 +115,7 @@ describe('Phase 2 pipeline through the composition root', () => {
   it('does not expose the raw database connection', () => {
     const s = open();
     expect(Object.keys(s).sort()).toEqual(
-      ['attachedLyricsRepository', 'close', 'createFolderWatcher', 'databasePath', 'favoritesRepository', 'fileSystem', 'historyRepository', 'libraryRootRepository', 'metadataReader', 'playbackSessionRepository', 'playlistRepository', 'scanner', 'trackRepository'],
+      ['attachedLyricsRepository', 'close', 'createFolderWatcher', 'customCoverRepository', 'databasePath', 'favoritesRepository', 'fileSystem', 'historyRepository', 'libraryRootRepository', 'metadataReader', 'playbackSessionRepository', 'playlistRepository', 'scanner', 'trackRepository'],
     );
   });
 });

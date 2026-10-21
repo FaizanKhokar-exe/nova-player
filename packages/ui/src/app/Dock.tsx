@@ -4,6 +4,8 @@ import { useStore } from 'zustand';
 import { usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { Icon } from '../theme/Icon.js';
 import { Spectrum } from '../visuals/Spectrum.js';
+import { useNowPlaying, useNowPlayingStoreApi } from '../nowplaying/NowPlayingStoreProvider.js';
+import { useActions } from './actions.js';
 import { LyricsBadge } from './Lyrics.js';
 import { Cover } from './Cover.js';
 import { SeekBar } from './SeekBar.js';
@@ -11,7 +13,11 @@ import { useAudioControls, usePrefs, useServices, useUi } from './services.js';
 
 /** The player bar. Opaque (never see-through over the content), always the same height, every control a real button. */
 export function Dock() {
-  const { playback, collections, ui, audioControls } = useServices();
+  const { playback, collections, ui, audioControls, thumbnails } = useServices();
+  const actions = useActions();
+  const nowPlayingStore = useNowPlayingStoreApi();
+  const customCover = useNowPlaying((s) => s.artwork.custom === true);
+  const coverButton = useRef<HTMLButtonElement | null>(null);
   const current = usePlaybackStore((s) => s.session?.current);
   const repeat = usePlaybackStore((s) => s.session?.repeatMode ?? 'off');
   const shuffle = usePlaybackStore((s) => s.session?.shuffle ?? false);
@@ -97,6 +103,16 @@ export function Dock() {
           </div>
         )}
         <LyricsBadge />
+        <button ref={coverButton} type="button" className="nx-icon-btn" aria-label="Cover picture" data-testid="player-cover-menu" disabled={track === undefined} data-active={customCover} onClick={() => {
+          const rect = anchorOf(coverButton.current);
+          const refresh = (): void => thumbnails.clear();
+          actions.showMenuAt(rect.left, rect.top - 8, [
+            { kind: 'item', id: 'cover-choose', label: 'Choose a cover picture…', icon: 'image', run: () => void nowPlayingStore?.getState().attachArtwork().then((message) => { refresh(); if (message !== undefined) playback.setState({ notice: message }); }) },
+            ...(customCover ? [{ kind: 'item' as const, id: 'cover-remove', label: 'Remove my cover picture', icon: 'trash' as const, run: () => void nowPlayingStore?.getState().detachArtwork().then(refresh) }] : []),
+          ]);
+        }}>
+          <Icon name="image" size={19} />
+        </button>
         <button type="button" className="nx-icon-btn" aria-label="Lyrics" data-keys="L" data-testid="player-lyrics" disabled={track === undefined} onClick={() => ui.getState().openNowPlaying('lyrics')}>
           <Icon name="lyrics" size={19} />
         </button>

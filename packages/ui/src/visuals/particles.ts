@@ -70,32 +70,50 @@ export interface ParticleInput {
   readonly height: number;
 }
 
+/** Fastest a particle may move (px/s) however many beats arrive: beats are frequent, kicks used to pile up and fling particles off the sides. */
+export const MAX_PARTICLE_SPEED = 58;
+
 export function stepParticles(s: ParticleSystem, input: ParticleInput, random: () => number = visualRandom): void {
   const dt = Math.min(0.05, Math.max(0, input.dt));
   const speed = 0.55 + input.level * 2.4;
   const cx = input.width / 2;
   const cy = input.height / 2;
+  // Particles are nudged back from the sides: a soft wall over the outer 14% of the width, so the field stays on screen.
+  const wall = Math.max(24, input.width * 0.14);
   for (let i = 0; i < s.count; i += 1) {
+    const depth = s.depth[i] as number;
     if (input.beat) {
-      // Kick away from the centre, stronger for near (deep) particles.
+      // A gentle push away from the centre (mostly sideways-neutral: a little extra upward lift), stronger for near particles.
       const dx = (s.x[i] as number) - cx;
       const dy = (s.y[i] as number) - cy;
       const length = Math.hypot(dx, dy) || 1;
-      const strength = 26 + (s.depth[i] as number) * 70;
-      s.vx[i] = (s.vx[i] as number) + (dx / length) * strength;
-      s.vy[i] = (s.vy[i] as number) + (dy / length) * strength;
+      const strength = 7 + depth * 20;
+      s.vx[i] = (s.vx[i] as number) + (dx / length) * strength * 0.55;
+      s.vy[i] = (s.vy[i] as number) + (dy / length) * strength - depth * 6;
       s.glow[i] = 1;
     }
     // Drag pulls velocity back to a gentle drift, so a kick fades instead of flinging particles away.
-    const drag = Math.exp(-dt * 2.4);
-    const driftY = -(6 + (s.depth[i] as number) * 14) * speed;
-    s.vx[i] = (s.vx[i] as number) * drag;
-    s.vy[i] = driftY + ((s.vy[i] as number) - driftY) * drag;
-    s.x[i] = (s.x[i] as number) + (s.vx[i] as number) * dt * speed;
-    s.y[i] = (s.y[i] as number) + (s.vy[i] as number) * dt * speed;
+    const drag = Math.exp(-dt * 3.2);
+    const driftY = -(6 + depth * 14) * speed;
+    let vx = (s.vx[i] as number) * drag;
+    let vy = driftY + ((s.vy[i] as number) - driftY) * drag;
+    // Soft side walls.
+    const x = s.x[i] as number;
+    if (x < wall) vx += ((wall - x) / wall) * 90 * dt;
+    else if (x > input.width - wall) vx -= ((x - (input.width - wall)) / wall) * 90 * dt;
+    // Speed cap.
+    const v = Math.hypot(vx, vy);
+    if (v > MAX_PARTICLE_SPEED) {
+      vx = (vx / v) * MAX_PARTICLE_SPEED;
+      vy = (vy / v) * MAX_PARTICLE_SPEED;
+    }
+    s.vx[i] = vx;
+    s.vy[i] = vy;
+    s.x[i] = Math.min(input.width + 8, Math.max(-8, x + vx * dt * speed)); // never leaves through the sides
+    s.y[i] = (s.y[i] as number) + vy * dt * speed;
     s.glow[i] = Math.max(0, (s.glow[i] as number) - dt * 2.2);
     const margin = 60;
-    if ((s.y[i] as number) < -margin || (s.x[i] as number) < -margin || (s.x[i] as number) > input.width + margin || (s.y[i] as number) > input.height + margin * 3) {
+    if ((s.y[i] as number) < -margin || (s.y[i] as number) > input.height + margin * 3) {
       respawn(s, i, input.width, input.height, random, false);
     }
   }

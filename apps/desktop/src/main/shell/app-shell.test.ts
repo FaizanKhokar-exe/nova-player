@@ -15,7 +15,7 @@ function setup() {
   const tray = { start: vi.fn(() => { order.push('tray.start'); return true; }), isActive: vi.fn(), menu: vi.fn(), dispose: vi.fn(() => { order.push('tray.dispose'); }) };
   const mediaKeys = { start: vi.fn(() => { order.push('keys.start'); return { registered: [], failed: [] }; }), dispose: vi.fn(() => { order.push('keys.dispose'); }) };
   const notifier = { start: vi.fn(() => { order.push('notifier.start'); }), dispose: vi.fn(() => { order.push('notifier.dispose'); }), history: vi.fn(() => []) };
-  const shell = createAppShell({ windows, tray, mediaKeys, notifier, dispatch: vi.fn(() => true) });
+  const shell = createAppShell({ windows, tray, mediaKeys, notifier, dispatch: vi.fn(() => true), openTrack: vi.fn(() => true) });
   return { shell, windows, tray, mediaKeys, notifier, order };
 }
 

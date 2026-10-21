@@ -1,5 +1,6 @@
 import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
 import path from 'node:path';
+import fsPromises from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { PLAYLIST_LIMITS, WALLPAPER_LIMITS } from '@nova/shared';
 import {
@@ -17,6 +18,7 @@ import {
   createTrackThumbnails,
   createWallpaperStore,
   runDatabaseDiagnostics,
+  SUPPORTED_AUDIO_EXTENSIONS,
   type LibraryServicesDiagnostic,
   type LibraryApplication,
   type LibraryServices,
@@ -35,6 +37,7 @@ import { registerCollectionsIpc } from './ipc/register-collections-ipc.js';
 import { createNativeImageResizer, createWallpaperPorts, wallpaperDirectory } from './media/electron-images.js';
 import type { AppShell } from './shell/app-shell.js';
 import { createElectronShell } from './shell/electron-shell.js';
+import { audioPathFromArgs, createFileOpener } from './shell/open-file.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -59,6 +62,17 @@ let stopHistoryRecorder: (() => void) | undefined;
 /** Phase 7: the desktop shell (the one window, tray, media keys). Created once at startup; disposed on quit. */
 let appShell: AppShell | undefined;
 
+// v0.11.3: "Open with Nova Player" / double-click on an audio file. Requests that arrive before the app has started wait here.
+const isAudioPath = (filePath: string): boolean => SUPPORTED_AUDIO_EXTENSIONS.has(path.extname(filePath).toLowerCase());
+let openHandler: ((filePath: string) => void) | undefined;
+const waitingOpens: string[] = [];
+function requestOpen(filePath: string): void {
+  if (openHandler === undefined) waitingOpens.push(filePath);
+  else openHandler(filePath);
+}
+const launchFile = audioPathFromArgs(process.argv.slice(1), isAudioPath);
+if (launchFile !== undefined) waitingOpens.push(launchFile);
+
 /** The persistent library database lives in the per-user app data folder -
  *  never in the project/install directory. */
 function libraryDatabasePath(): string {
@@ -75,7 +89,18 @@ registerNovaMediaSchemeAsPrivileged();
 // (which shows its window) and exits. The lock is per `userData`, so it never couples separate profiles.
 const isPrimaryInstance = app.requestSingleInstanceLock();
 if (!isPrimaryInstance) app.quit();
-else app.on('second-instance', () => appShell?.show());
+else {
+  app.on('second-instance', (_event, argv) => {
+    appShell?.show();
+    const file = audioPathFromArgs(argv.slice(1), isAudioPath);
+    if (file !== undefined) requestOpen(file);
+  });
+  // macOS hands files over with an event instead of an argument.
+  app.on('open-file', (event, filePath) => {
+    event.preventDefault();
+    requestOpen(filePath);
+  });
+}
 
 // Windows taskbar / notification identity (matches `appId` in electron-builder.yml).
 if (process.platform === 'win32') app.setAppUserModelId('com.novaplayer.desktop');
@@ -115,6 +140,21 @@ async function pickLyricsFile(): Promise<string | undefined> {
     properties: ['openFile'],
     filters: [
       { name: 'Lyrics (.lrc, .txt)', extensions: ['lrc', 'txt'] },
+      { name: 'All files', extensions: ['*'] },
+    ],
+  };
+  const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
+  return result.canceled ? undefined : result.filePaths[0];
+}
+
+/** The native "choose a cover picture" dialog for one track (v0.11.3). Only the type filter; the real judgement (type by content, size) is the sidecars'. */
+async function pickArtworkFile(): Promise<string | undefined> {
+  const options: OpenDialogOptions = {
+    title: 'Choose a cover picture',
+    properties: ['openFile'],
+    filters: [
+      { name: 'Pictures (.jpg, .png, .webp)', extensions: ['jpg', 'jpeg', 'png', 'webp'] },
       { name: 'All files', extensions: ['*'] },
     ],
   };
@@ -291,6 +331,7 @@ function startApplication(): void {
     readFile: readFileBounded,
     readEmbeddedArtwork: readEmbeddedPicture,
     attachedLyrics: libraryServices.attachedLyricsRepository,
+    customCovers: libraryServices.customCoverRepository,
   });
   const trackThumbnails = createTrackThumbnails({
     sidecars: trackSidecars,
@@ -322,6 +363,8 @@ function startApplication(): void {
     application: playbackApplication,
     sidecars: trackSidecars,
     pickLyricsFile,
+    pickArtworkFile,
+    onArtworkChanged: () => trackThumbnails.invalidate(),
     isTrustedSender,
     log: logError,
   });
@@ -380,6 +423,48 @@ function startApplication(): void {
       .then((report) => console.log(`[nova] startup sync: roots=${report.rootCount} available=${report.availableRoots} watching=${report.watching} scan=${report.scanStarted}`))
       .catch((error: unknown) => logError('[nova] startup sync failed:', error));
   }
+
+  // Opening an audio file from the OS: find it in the library (or add its folder), then tell the player to play it.
+  const library2 = libraryApplication;
+  const fileOpener = createFileOpener({
+    library: {
+      listTracks: () => library2.listTracks(),
+      listRoots: () => library2.listRoots(),
+      addRoot: (folder) => library2.addRoot(folder),
+      startScan: (request) => library2.startScan(request),
+      scanning: () => library2.getScanState().active !== undefined,
+      onceScanFinished: (listener) => {
+        const off = library2.subscribe((event) => {
+          if (event.type !== 'scan-finished') return;
+          off();
+          listener();
+        });
+        return off;
+      },
+    },
+    isAudioFile: isAudioPath,
+    resolveFile: async (filePath) => {
+      try {
+        const real = await fsPromises.realpath(filePath);
+        return (await fsPromises.stat(real)).isFile() ? real : undefined;
+      } catch {
+        return undefined;
+      }
+    },
+    play: (trackId) => appShell?.openTrack(trackId) ?? false,
+    show: () => appShell?.show(),
+    caseInsensitive: process.platform === 'win32' || process.platform === 'darwin',
+    log: logError,
+  });
+  const firstWindow = appShell.windows.current() as BrowserWindow | undefined;
+  const rendererReady =
+    firstWindow === undefined || !firstWindow.webContents.isLoading()
+      ? Promise.resolve()
+      : new Promise<void>((resolve) => firstWindow.webContents.once('did-finish-load', () => setTimeout(resolve, 900)));
+  void rendererReady.then(() => {
+    openHandler = (filePath) => void fileOpener.open(filePath);
+    for (const filePath of waitingOpens.splice(0)) openHandler(filePath);
+  });
 
   app.on('activate', () => appShell?.show());
 }

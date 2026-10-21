@@ -434,3 +434,66 @@ describe('Phase 11: folder cover fallback', () => {
     expect(await sidecars().getArtwork(track.id)).toEqual({ status: 'none' });
   });
 });
+
+describe('v0.11.3: attached lyrics follow edits to their source file', () => {
+  const memory = () => {
+    const rows = new Map<string, { text: string; source: string | undefined }>();
+    return {
+      rows,
+      get: (id: string) => rows.get(id)?.text,
+      set: (id: string, text: string, source?: string) => void rows.set(id, { text, source }),
+      delete: (id: string) => rows.delete(id),
+      getSource: (id: string) => rows.get(id)?.source,
+    };
+  };
+  it('picks up the edited file, keeps the stored copy when the file disappears or loses its timing', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    const picked = write('elsewhere/words.lrc', '[00:01.00]old');
+    const attachedLyrics = memory();
+    const s = sidecars({ attachedLyrics });
+    expect((await s.attachLyricsFromFile(track.id, picked)).outcome).toBe('attached');
+    expect((await s.getLyrics(track.id)).lines[0]?.text).toBe('old');
+
+    fs.writeFileSync(picked, '[00:01.00]new text\n[00:03.00]more');
+    const edited = await s.getLyrics(track.id);
+    expect(edited).toMatchObject({ status: 'found', attached: true });
+    expect(edited.lines.map((l) => l.text)).toEqual(['new text', 'more']);
+    expect(attachedLyrics.rows.get(track.id)?.text).toContain('new text'); // remembered
+
+    fs.writeFileSync(picked, 'no timing at all');
+    expect((await s.getLyrics(track.id)).lines[0]?.text).toBe('new text');
+    fs.rmSync(picked);
+    expect((await s.getLyrics(track.id)).lines[0]?.text).toBe('new text');
+  });
+});
+
+describe('v0.11.3: a cover attached by hand', () => {
+  const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(40, 1)]);
+  const covers = () => {
+    const rows = new Map<string, { mimeType: string; bytes: Uint8Array }>();
+    return { rows, get: (id: string) => rows.get(id), set: (id: string, mimeType: string, bytes: Uint8Array) => void rows.set(id, { mimeType, bytes }), delete: (id: string) => rows.delete(id) };
+  };
+  it('is judged by its content, wins over folder covers, and can be removed again', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    write('music/cover.png', Buffer.concat([PNG, Buffer.from('folder')]));
+    const picked = write('pics/mine.png', PNG);
+    const s = sidecars({ customCovers: covers() });
+    expect(await s.attachArtworkFromFile(track.id, write('pics/fake.png', 'not an image'))).toEqual({ outcome: 'not-an-image' });
+    expect(await s.attachArtworkFromFile(track.id, path.join(kit.sandbox, 'pics/missing.png'))).toEqual({ outcome: 'unreadable' });
+    expect(await s.attachArtworkFromFile(track.id, write('pics/huge.png', Buffer.concat([PNG, Buffer.alloc(MAX_ARTWORK_BYTES)])))).toEqual({ outcome: 'too-large' });
+    expect(await s.attachArtworkFromFile(track.id, picked)).toEqual({ outcome: 'attached' });
+    const art = await s.getArtwork(track.id);
+    expect(art).toMatchObject({ status: 'found', mimeType: 'image/png', custom: true });
+    expect(art.status === 'found' && art.bytes.byteLength).toBe(PNG.byteLength);
+    expect(await s.detachArtwork(track.id)).toBe(true);
+    const after = await s.getArtwork(track.id);
+    expect(after.status === 'found' && after.custom).toBeUndefined(); // the folder cover shows again
+    expect(await s.detachArtwork(track.id)).toBe(false);
+  });
+  it('an unknown track is refused before anything is read', async () => {
+    const s = sidecars({ customCovers: covers() });
+    await expect(s.attachArtworkFromFile('123e4567-e89b-42d3-a456-426614174000', '/x.png')).rejects.toBeInstanceOf(TrackSidecarError);
+  });
+});

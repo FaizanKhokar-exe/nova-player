@@ -1009,3 +1009,20 @@ The user installed 0.11.0 on a real Windows PC and reported the first batch. Cha
   lyrics/instrumental, and a cursor; it vanishes with the pointer. The loudness is computed on first hover from the playing song (`playback/energy-profile.ts`: fetch + Web Audio decode, cached
   in memory per track; files over 96 MB are skipped). Deliberate policy changes: CSP gains `connect-src 'self' nova-media:` (pinned in the boundary test), and that one file is exempt from the
   "no fetch in the renderer" rule (it never builds an address; the playback store hands it the one it already plays).
+
+## Phase 14 — third feedback batch (v0.11.3)
+- **Open with / double-click an audio file plays it.** Main reads the path from the launch arguments (Windows), `second-instance` (app already running) or `open-file` (macOS);
+  `shell/open-file.ts` (Electron-free, unit-tested) finds the track in the library, else adds the file's FOLDER as a library folder (an explicit user action; removable in Settings),
+  scans it and plays the track. The renderer never sees the path: main sends `shell:command {command:'play-track', trackId}` and the renderer plays it like a click.
+  `electron-builder.yml` registers the audio extensions (`fileAssociations`), so "Open with" lists Nova Player. **Windows behaviour (default-player choice, SmartScreen) cannot be verified on Linux.**
+  A file given at launch is delivered after the window has loaded (+0.9 s) so the renderer is listening.
+- **Custom cover from the player bar** (image button): `track:attachArtwork` / `track:detachArtwork` (main shows the dialog; type judged by content; <= 5 MiB; stored in the
+  new `custom_covers` table, migration 7). It wins over embedded and folder covers; thumbnails and Now Playing refresh at once (`ThumbnailCache.clear()` now also re-renders covers on screen).
+  Side effect fixed: Now Playing now always asks main for artwork, so folder covers (cover.jpg) show there too (a test that pinned "never asks when the file has no embedded picture" was changed).
+- **Attached .lrc follows edits:** migration 7 also remembers the SOURCE path of an attached .lrc (main-only). `getLyrics` re-reads it; if it changed and still has timed lines the new text is used and stored; if the file moved/was deleted the stored copy keeps working.
+  The window re-reads lyrics silently on focus (only updates if different). Sidecar `.lrc` files are decoded like attached ones (BOMs / UTF-16 / ANSI).
+- **Particles stay on screen:** the more frequent beats (0.11.2) stacked kicks and flung particles sideways. Kicks are gentler, speed is capped (`MAX_PARTICLE_SPEED`), soft walls on the sides, positions are clamped; new test runs 900 frames of rapid beats.
+- **Performance (measured honestly):** startup is ~0.65 s and dominated by Electron itself, so no bundle splitting was done. Real wins: the beat variable is now set only on the two elements that use it
+  (it was set on the whole Now Playing screen, forcing every lyric line to restyle every frame) and the glow fades a fixed gradient with `opacity` (compositor-only) instead of repainting one;
+  idle-cursor timer is re-armed at most every 150 ms; SQLite `temp_store=MEMORY` and a 20 MB page cache. Visual quality is unchanged. I could not measure GPU cost on real Windows hardware.
+- Deliberate test changes: `library-services.test.ts` key list (+`customCoverRepository`), `electron-runtime.test.ts` source list (+`custom-media-schema`), collections upgrade test uses `MIGRATIONS.length`, IPC channel counts 20→22.

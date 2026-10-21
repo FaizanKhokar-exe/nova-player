@@ -32,6 +32,7 @@ export {
   SqliteLibraryRootRepository,
   SqlitePlaybackSessionRepository,
   SqliteAttachedLyricsRepository,
+  SqliteCustomCoverRepository,
   SqliteFavoritesRepository,
   SqliteHistoryRepository,
   SqlitePlaylistRepository,
