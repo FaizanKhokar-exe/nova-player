@@ -48,6 +48,7 @@ function SourceStep() {
   const text = useStudio((s) => s.text);
   const search = useStudio((s) => s.search);
   const startFromSynced = useStudio((s) => s.startFromSynced);
+  const hasExisting = useStudio((s) => s.hasExisting);
   const lineCount = useMemo(() => splitLyricsText(text).length, [text]);
   const api = studio.getState();
 
@@ -91,13 +92,21 @@ function SourceStep() {
 
       <section className="nx-studio-card" aria-label="Lyrics text">
         <h3>The lyrics</h3>
+        {hasExisting && <p className="nx-studio-note" data-testid="studio-existing-note">This song already has lyrics. Fix their timing, or estimate again from the song - saving replaces them (the old .lrc file is kept as .lrc.bak).</p>}
         <p className="nx-studio-hint">One line per sung line, any language or script. Edit freely - fix spelling, remove “[Chorus]” labels, add missing lines.</p>
         <textarea className="nx-studio-text" value={text} dir="auto" spellCheck={false} placeholder={'Paste or type the lyrics here…\n\nPaste them in any language: English, اردو, हिन्दी, ਪੰਜਾਬੀ, Roman Urdu…'} data-testid="studio-text" onChange={(e) => api.setText(e.target.value)} />
         <div className="nx-studio-foot">
           <span data-testid="studio-line-count">{lineCount} {lineCount === 1 ? 'line' : 'lines'}{startFromSynced ? ' · starting from the found timing' : ''}</span>
-          <button type="button" className="nx-btn nx-btn--primary" disabled={lineCount === 0} data-testid="studio-begin" onClick={() => void api.begin()}>
-            <Icon name="sparkles" size={16} /> Estimate the timing
-          </button>
+          <span className="nx-studio-foot-actions">
+            {hasExisting && startFromSynced && (
+              <button type="button" className="nx-btn nx-btn--primary" data-testid="studio-fix-current" onClick={() => void api.begin()}>
+                <Icon name="edit" size={16} /> Fix the current timing
+              </button>
+            )}
+            <button type="button" className={hasExisting && startFromSynced ? 'nx-btn' : 'nx-btn nx-btn--primary'} disabled={lineCount === 0} data-testid="studio-begin" onClick={() => void api.begin(true)}>
+              <Icon name="sparkles" size={16} /> {hasExisting ? 'Estimate again from the song' : 'Estimate the timing'}
+            </button>
+          </span>
         </div>
       </section>
     </div>

@@ -180,6 +180,11 @@ export function LyricsBadge() {
         </button>
       )}
       {found && (
+        <button type="button" className="nx-lrc-btn" aria-label="Fix or redo the timing in Lyric Studio" data-tip="Fix / redo timing in Lyric Studio…" data-testid="lyrics-retime" onClick={() => studio.getState().openStudio()}>
+          <Icon name="sparkles" size={15} />
+        </button>
+      )}
+      {found && (
         <button type="button" className="nx-lrc-btn" data-active={attached} aria-label={label} data-tip={label} disabled={action.busy} data-testid={attached ? 'lyrics-attached-note' : 'lyrics-attach-other'} onClick={() => void (attached ? nowPlaying?.getState().detachLyrics() : nowPlaying?.getState().attachLyrics())}>
           <Icon name={attached ? 'close' : 'upload'} size={15} />
         </button>

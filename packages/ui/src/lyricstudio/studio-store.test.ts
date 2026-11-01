@@ -140,3 +140,20 @@ describe('Lyric Studio store', () => {
     expect(h.store.getState().step).toBe('source');
   });
 });
+
+describe('reopening on a song that already has lyrics', () => {
+  it('preloads them, can fix their timing, or estimate again from the audio', async () => {
+    const h = harness();
+    const existing = [{ timeMs: 1000, text: 'hello darling come to me' }, { timeMs: 4000, text: 'I have been waiting' }, { timeMs: 6000, text: '' }, { timeMs: 9000, text: 'hold me' }];
+    const store = createStudioStore({ invoke: async () => ({ ok: true, value: {} }) } as unknown as NovaBridge, { getState: () => ({ session: { current: { track: { id: TRACK, title: 'Moon', artist: 'S' } } }, engine: { durationMs: 20000, playing: false }, monoSignal: async () => undefined, livePositionMs: () => 0, seekMs: vi.fn(), togglePlay: vi.fn() }) } as unknown as PlaybackStoreApi, () => undefined, () => existing);
+    store.getState().openStudio();
+    expect(store.getState()).toMatchObject({ hasExisting: true, startFromSynced: true });
+    expect(store.getState().text.split('\n')).toEqual(['hello darling come to me', 'I have been waiting', 'hold me']);
+    await store.getState().begin();
+    expect(store.getState().times).toEqual([1000, 4000, 9000]);
+    store.getState().backToSource();
+    await store.getState().begin(true);
+    expect(store.getState().times).not.toEqual([1000, 4000, 9000]);
+    expect(h.store.getState().hasExisting).toBe(false);
+  });
+});

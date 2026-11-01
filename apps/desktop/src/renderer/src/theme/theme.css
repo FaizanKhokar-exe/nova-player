@@ -606,3 +606,4 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 @media (max-width: 900px) { .nx-studio-source { grid-template-columns: 1fr; } .nx-studio-query { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) { .nx-studio, .nx-studio-analysing svg { animation: none; } }
 :root[data-reduce-motion='true'] .nx-studio-analysing svg { animation: none; }
+.nx-studio-foot-actions { display: inline-flex; gap: 8px; }

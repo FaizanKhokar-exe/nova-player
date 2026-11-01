@@ -28,6 +28,8 @@ export interface StudioState {
   readonly search: { readonly status: SearchStatus; readonly candidates: readonly LyricsCandidateDto[]; readonly chosenId: number | undefined };
   /** True when the chosen result brought its own timestamps and the listener asked to start from them. */
   readonly startFromSynced: boolean;
+  /** The song already has lyrics: the studio opened on them, so they can be fixed or estimated again. */
+  readonly hasExisting: boolean;
   readonly lines: readonly PlainLine[];
   readonly times: readonly number[];
   readonly confidence: readonly number[];
@@ -47,7 +49,8 @@ export interface StudioState {
   setQuery(title: string, artist: string): void;
   runSearch(): Promise<void>;
   pickCandidate(candidate: LyricsCandidateDto, startFromSynced: boolean): void;
-  begin(): Promise<void>;
+  /** `fresh`: ignore any timing the words came with and estimate from the audio again. */
+  begin(fresh?: boolean): Promise<void>;
   backToSource(): void;
   select(index: number): void;
   stamp(): void;
@@ -74,7 +77,7 @@ const UNREACHABLE = 'Could not reach the application. Try restarting Nova Player
 const UNDO_LIMIT = 60;
 const PRE_ROLL_MS = 700;
 
-export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi, onSaved: () => void = () => undefined): StudioStoreApi {
+export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi, onSaved: () => void = () => undefined, existingLines: () => readonly TimedLine[] = () => []): StudioStoreApi {
   let features: VocalFeatures | undefined;
   let weights: number[] = [];
   let token = 0;
@@ -98,6 +101,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
       queryArtist: '',
       search: { status: 'idle' as SearchStatus, candidates: [] as readonly LyricsCandidateDto[], chosenId: undefined as number | undefined },
       startFromSynced: false,
+      hasExisting: false,
       lines: [] as readonly PlainLine[],
       times: [] as readonly number[],
       confidence: [] as readonly number[],
@@ -137,7 +141,10 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         features = undefined;
         undoStack = [];
         syncedLines = undefined;
-        set({ ...fresh, open: true, trackId: current.track.id, title: current.track.title, artist: current.track.artist, queryTitle: current.track.title, queryArtist: current.track.artist, locks: new Set<number>() });
+        const existing = existingLines().filter((l) => l.text.trim() !== '');
+        if (existing.length > 0) syncedLines = existing.map((l) => ({ timeMs: l.timeMs, text: l.text }));
+        const preload = existing.length > 0 ? { text: existing.map((l) => l.text).join('\n'), startFromSynced: true, hasExisting: true } : {};
+        set({ ...fresh, ...preload, open: true, trackId: current.track.id, title: current.track.title, artist: current.track.artist, queryTitle: current.track.title, queryArtist: current.track.artist, locks: new Set<number>() });
       },
       close() {
         token += 1; // abandons any analysis in flight
@@ -173,12 +180,12 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         set({ text: useSynced ? timed.map((l) => l.text).join('\n') : text, startFromSynced: useSynced, search: { ...get().search, chosenId: candidate.id } });
       },
 
-      async begin() {
+      async begin(freshEstimate = false) {
         const s = get();
         const lines = splitLyricsText(s.text);
         if (lines.length === 0 || s.trackId === undefined) return;
         const mine = ++token;
-        const useSynced = s.startFromSynced && syncedLines !== undefined && syncedLines.length === lines.length;
+        const useSynced = !freshEstimate && s.startFromSynced && syncedLines !== undefined && syncedLines.length === lines.length;
         weights = lines.map((l) => lineWeight(l.text));
         undoStack = [];
         set({ step: 'analysing', lines, progress: 0, analysisFailed: false, canUndo: false, locks: new Set<number>(), selected: 0, save: EMPTY_SAVE });

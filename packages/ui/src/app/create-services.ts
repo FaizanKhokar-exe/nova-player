@@ -22,7 +22,10 @@ export function createAppServices(bridge: NovaBridge, audio: AudioLike & AudioEl
   const library = createLibraryStore(bridge);
   const playback = createPlaybackStore(bridge, audio);
   const nowPlaying = createNowPlayingStore(bridge, playback);
-  const studio = createStudioStore(bridge, playback, () => void nowPlaying.getState().refreshLyrics());
+  const studio = createStudioStore(bridge, playback, () => void nowPlaying.getState().refreshLyrics(), () => {
+    const lyrics = nowPlaying.getState().lyrics;
+    return lyrics.status === 'ready' && lyrics.availability === 'found' ? lyrics.lines : [];
+  });
   const prefs = createPrefsStore();
   const engine = createAudioEngine({ element: audio });
   const audioControls = createAudioControls({ audio, engine, prefs, playback });

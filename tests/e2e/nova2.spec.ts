@@ -634,3 +634,27 @@ test('Lyric Studio: pasted words in Urdu and Hindi work, an unsaved timing asks 
   expect(fs.existsSync(path.join(box.music, 'Alpha.lrc'))).toBe(false);
   await app.close();
 });
+
+test('Lyric Studio: a song that already has lyrics can be re-opened to fix or redo the timing; the old .lrc is kept as .bak', async () => {
+  const mine = placeLyrics(box, 'Alpha', 'basic.lrc');
+  const original = fs.readFileSync(mine, 'utf8');
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByTestId('player-bar').getByTestId('lyrics-retime').click({ timeout: 15_000 });
+  await expect(window.getByTestId('studio-existing-note')).toBeVisible();
+  await window.getByTestId('studio-fix-current').click();
+  await expect(window.getByTestId('studio-row').first()).toBeVisible({ timeout: 30_000 });
+  const before = await window.getByTestId('studio-time').first().innerText();
+  await window.keyboard.press('ArrowRight');
+  await window.keyboard.press('ArrowRight');
+  await expect(window.getByTestId('studio-time').first()).not.toHaveText(before);
+  await window.getByTestId('studio-save').click();
+  await expect(window.getByTestId('studio-save-result')).toContainText('Saved', { timeout: 10_000 });
+  expect(fs.readFileSync(`${mine}.bak`, 'utf8')).toBe(original);
+  expect(fs.readFileSync(mine, 'utf8')).not.toBe(original);
+  // "estimate again" is offered too
+  await window.getByTestId('studio-back').click();
+  await expect(window.getByTestId('studio-begin')).toContainText('Estimate again');
+  await app.close();
+});
