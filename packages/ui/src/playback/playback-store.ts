@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import { createProfileLoader } from './energy-profile.js';
+import { createProfileLoader, createSignalLoader, type MonoSignal } from './energy-profile.js';
 import type {
   IpcRequest,
   IpcResponse,
@@ -130,6 +130,10 @@ export interface PlaybackActions {
   seekMs(positionMs: number): void;
   /** Loudness per slice of the CURRENT song (for the seek-bar hover preview); undefined when it cannot be analysed. */
   energyProfile(): Promise<readonly number[] | undefined>;
+  /** The CURRENT song as mono 16 kHz samples for Lyric Studio's timing analysis; undefined when it cannot be decoded. */
+  monoSignal(): Promise<MonoSignal | undefined>;
+  /** The exact playhead right now (ms), read from the audio element - not the ~4 Hz reported position. For tap-timing. */
+  livePositionMs(): number;
   /** 0..1. Raising the volume above 0 also un-mutes. */
   setVolume(volume: number): void;
   toggleMute(): void;
@@ -218,6 +222,7 @@ function toMs(seconds: number): number {
 
 export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, options: PlaybackStoreOptions = {}): PlaybackStoreApi {
   const loadProfile = createProfileLoader();
+  const loadSignal = createSignalLoader();
   const saveIntervalMs = options.positionSaveIntervalMs ?? 5_000;
   const now = options.now ?? Date.now;
   const positionStore = createStore<PositionState>(() => ({ positionMs: 0 }));
@@ -618,6 +623,15 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       energyProfile() {
         const current = get().session?.current;
         return current === undefined ? Promise.resolve(undefined) : loadProfile(current.track.id, current.mediaUrl);
+      },
+
+      livePositionMs() {
+        return positionMs();
+      },
+
+      monoSignal() {
+        const current = get().session?.current;
+        return current === undefined ? Promise.resolve(undefined) : loadSignal(current.track.id, current.mediaUrl);
       },
 
       seekMs(target) {

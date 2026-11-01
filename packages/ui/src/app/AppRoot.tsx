@@ -10,6 +10,7 @@ import { NowPlayingScreen } from './NowPlaying.js';
 import { QueueDrawer } from './QueueDrawer.js';
 import { Sidebar } from './Sidebar.js';
 import { Topbar } from './Topbar.js';
+import { LyricStudio } from '../lyricstudio/LyricStudio.js';
 import { ContextMenuLayer, ModalLayer, PopoverLayer, ToastLayer } from './overlays.js';
 import { ScrollContext } from './scroll.js';
 import { SPEEDS } from '../prefs/prefs-store.js';
@@ -71,7 +72,7 @@ const isTyping = (target: EventTarget | null): boolean => {
 
 /** Global effects: engine + visuals follow playback, preferences, shortcuts. Renders nothing. */
 function AppEffects() {
-  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs, nowPlaying } = useServices();
+  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs, nowPlaying, studio } = useServices();
   const playing = usePlaybackStore((s) => s.engine.playing);
   const performance = usePrefs((s) => s.performance);
 
@@ -84,6 +85,7 @@ function AppEffects() {
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (studio.getState().open) return; // Lyric Studio owns the keyboard while it is open
       const key = event.key;
       const ctrl = event.ctrlKey || event.metaKey;
       if (ctrl && key.toLowerCase() === 'k') { event.preventDefault(); ui.getState().navigate({ name: 'search' }); ui.getState().focusSearch(); return; }
@@ -135,7 +137,7 @@ function AppEffects() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [ui, playback, prefs, collections]);
+  }, [ui, playback, prefs, collections, studio]);
 
   // The .lrc may be edited in another program: when the window comes back to the front, the lyrics are re-read (silently, only if they changed).
   useEffect(() => {
@@ -228,6 +230,7 @@ export function AppRoot() {
       <PopoverLayer />
       <ContextMenuLayer />
       <ModalLayer />
+      <LyricStudio />
       <ToastLayer />
       <Tooltips />
     </div>

@@ -1,4 +1,4 @@
-import type { PlaybackApplication, PlaybackApplicationEvent, TrackSidecars } from '@nova/infrastructure';
+import type { LyricsProvider, PlaybackApplication, PlaybackApplicationEvent, TrackSidecars } from '@nova/infrastructure';
 import type { IpcResult, PlaybackIpcContract } from '@nova/shared';
 import { toQueueDto } from './browse-dto-mappers.js';
 import {
@@ -14,6 +14,8 @@ import type { IpcRegistrar, PublishEvent } from './register-library-ipc.js';
 import { validateNoRequest } from './validation.js';
 import {
   validateDiagnoseSource,
+  validateLyricsSearch,
+  validateSaveLyrics,
   validatePlayTrack,
   validatePositioned,
   validateReportPosition,
@@ -35,6 +37,10 @@ export interface PlaybackIpcDependencies {
   readonly pickArtworkFile: () => Promise<string | undefined>;
   /** A track's cover was attached or removed: cached thumbnails must forget which tracks have covers. */
   readonly onArtworkChanged: () => void;
+  /** v0.12.0: what the library knows about a track (to search by), or `undefined` for an unknown id. */
+  readonly describeTrack: (trackId: string) => { readonly title: string; readonly artist: string; readonly album?: string; readonly durationSec?: number } | undefined;
+  /** v0.12.0: the online lyrics-text provider, or `undefined` when this build has none. */
+  readonly lyricsProvider?: LyricsProvider;
   /** Whether a call came from the application's own window. */
   readonly isTrustedSender: (event: unknown) => boolean;
   /** Where unexpected errors go (the main-process log). Never the renderer. */
@@ -51,7 +57,7 @@ type Value<K extends PlaybackChannel> = Extract<PlaybackIpcContract[K]['response
  * the domain, behind `PlaybackApplication`.
  */
 export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void {
-  const { registrar, application, sidecars, pickLyricsFile, pickArtworkFile, onArtworkChanged, isTrustedSender, log } = dependencies;
+  const { registrar, application, sidecars, pickLyricsFile, pickArtworkFile, onArtworkChanged, describeTrack, lyricsProvider, isTrustedSender, log } = dependencies;
 
   function register<K extends PlaybackChannel, R>(
     channel: K,
@@ -153,6 +159,29 @@ export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void
     const removed = await sidecars.detachArtwork(trackId);
     if (removed) onArtworkChanged();
     return { removed };
+  });
+
+  // v0.12.0 Lyric Studio. The search sends only the tags (or the listener's correction) of ONE known track.
+  register('lyrics:search', validateLyricsSearch, async ({ trackId, title, artist }) => {
+    const known = describeTrack(trackId);
+    if (known === undefined) {
+      await sidecars.getLyrics(trackId); // throws the right invalid-id / track-not-found error
+      return { status: 'error', title: '', artist: '', candidates: [] };
+    }
+    const query = {
+      title: title !== undefined && title !== '' ? title : known.title,
+      artist: artist !== undefined ? artist : known.artist,
+      ...(known.album !== undefined && { album: known.album }),
+      ...(known.durationSec !== undefined && { durationSec: known.durationSec }),
+    };
+    if (lyricsProvider === undefined) return { status: 'unavailable', title: query.title, artist: query.artist, candidates: [] };
+    const result = await lyricsProvider.search(query);
+    return { status: result.status, title: query.title, artist: query.artist, candidates: result.candidates };
+  });
+
+  register('lyrics:save', validateSaveLyrics, async ({ trackId, lrc }) => {
+    const result = await sidecars.saveLrc(trackId, lrc);
+    return { outcome: result.outcome };
   });
 
   register('playback:diagnoseSource', validateDiagnoseSource, async (request) => {

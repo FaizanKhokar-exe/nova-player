@@ -48,7 +48,7 @@ const Line = memo(function Line({ line, index, distance, active, depthBlur, sing
  * The list scrolls to keep the sung line at the visual centre; scrolling by hand pauses that until "Jump to now".
  */
 export function Lyrics() {
-  const { playback } = useServices();
+  const { playback, studio } = useServices();
   const trackId = useNowPlaying((s) => s.trackId);
   const lyrics = useNowPlaying((s) => s.lyrics);
   const action = useNowPlaying((s) => s.lyricsAction);
@@ -115,6 +115,11 @@ export function Lyrics() {
   );
 
   const onSeek = useCallback((line: LyricLineDto) => seekMs(lyricSeekMs(line)), [seekMs]);
+  const create = (
+    <button type="button" className="nx-btn nx-btn--primary" disabled={action.busy} data-testid="create-lyrics" onClick={() => studio.getState().openStudio()}>
+      <Icon name="sparkles" size={16} /> Create synced lyrics…
+    </button>
+  );
   const attach = (
     <button type="button" className="nx-btn" style={{ background: 'rgba(255,255,255,.16)', color: '#fff', borderColor: 'transparent' }} disabled={action.busy} data-testid="attach-lyrics" onClick={() => void nowPlaying?.getState().attachLyrics()}>
       <Icon name="upload" size={16} /> Attach a .lrc file…
@@ -125,7 +130,7 @@ export function Lyrics() {
   if (!hasTrack) body = <div className="nx-lyrics-empty" data-testid="lyrics-idle"><span>Play something and its lyrics will show up here.</span></div>;
   else if (lyrics.status === 'idle' || lyrics.status === 'loading') body = <div className="nx-lyrics-empty" data-testid="lyrics-loading"><span>Loading lyrics…</span></div>;
   else if (lyrics.status === 'error') body = <div className="nx-lyrics-empty" data-testid="lyrics-error"><span>Lyrics couldn’t be loaded right now.</span><button type="button" className="nx-btn" onClick={() => nowPlaying?.getState().retryLyrics()}>Try again</button></div>;
-  else if (lyrics.availability === 'none') body = <div className="nx-lyrics-empty" data-testid="lyrics-none"><Icon name="lyrics" size={34} /><span>No lyrics for this song yet. Put a .lrc file with the same name next to it, or attach one yourself.</span>{attach}</div>;
+  else if (lyrics.availability === 'none') body = <div className="nx-lyrics-empty" data-testid="lyrics-none"><Icon name="lyrics" size={34} /><span>No lyrics for this song yet. Put a .lrc file with the same name next to it, or attach one yourself - or let Nova Player help you make one.</span>{create}{attach}</div>;
   else if (lyrics.availability === 'empty') body = <div className="nx-lyrics-empty" data-testid="lyrics-empty"><span>This lyrics file has no timed lines.</span>{attach}</div>;
   else if (lyrics.availability === 'unavailable') body = <div className="nx-lyrics-empty" data-testid="lyrics-unavailable"><span>Lyrics aren’t available right now - the song’s folder can’t be reached.</span></div>;
   else if (lyrics.availability === 'unreadable') body = <div className="nx-lyrics-empty" data-testid="lyrics-unreadable"><span>This lyrics file couldn’t be read.</span>{attach}</div>;
@@ -158,14 +163,21 @@ export function LyricsBadge() {
   const lyrics = useNowPlaying((s) => s.lyrics);
   const action = useNowPlaying((s) => s.lyricsAction);
   const nowPlaying = useNowPlayingStoreApi();
+  const { studio } = useServices();
   const found = lyrics.status === 'ready' && lyrics.availability === 'found';
-  if (!found && action.message === undefined) return null;
+  const none = lyrics.status === 'ready' && lyrics.availability === 'none';
+  if (!found && !none && action.message === undefined) return null;
   const attached = found && lyrics.attached;
   const label = attached ? 'Using the .lrc you attached – click to remove it' : 'Use a different .lrc file…';
   return (
     <div className="nx-lrc-badge" data-testid="lyrics-actions">
       {action.message !== undefined && (
         <button type="button" className="nx-lrc-msg" role="status" data-testid="lyrics-action-message" aria-label={`${action.message} (dismiss)`} onClick={() => nowPlaying?.getState().dismissLyricsMessage()}>{action.message}</button>
+      )}
+      {none && (
+        <button type="button" className="nx-lrc-btn" aria-label="Create synced lyrics for this song" data-tip="Create synced lyrics…" data-testid="lyrics-create" onClick={() => studio.getState().openStudio()}>
+          <Icon name="sparkles" size={15} />
+        </button>
       )}
       {found && (
         <button type="button" className="nx-lrc-btn" data-active={attached} aria-label={label} data-tip={label} disabled={action.busy} data-testid={attached ? 'lyrics-attached-note' : 'lyrics-attach-other'} onClick={() => void (attached ? nowPlaying?.getState().detachLyrics() : nowPlaying?.getState().attachLyrics())}>

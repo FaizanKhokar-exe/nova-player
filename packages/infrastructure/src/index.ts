@@ -165,7 +165,9 @@ export {
   type AttachLyricsResult,
   type AttachedLyricsStore,
   decodeLyricsBytes,
+  type SaveLrcResult,
 } from './media/track-sidecars.js';
+export * from './lyrics/lrclib-provider.js';
 export { readFileBounded } from './media/fs-readers.js';
 export { readEmbeddedPicture } from './metadata/music-metadata-reader.js';
 

@@ -25,6 +25,7 @@ export interface TrackSummary {
 export * from './library-ipc.js';
 export * from './browse-ipc.js';
 export * from './track-detail-ipc.js';
+export * from './lyrics-studio-ipc.js';
 export * from './playback-ipc.js';
 export * from './collections-ipc.js';
 import type {
@@ -53,6 +54,7 @@ import type {
   ThumbnailDto,
   WallpaperDto,
 } from './collections-ipc.js';
+import type { LyricsSearchRequest, LyricsSearchResultDto, SaveLyricsRequest, SaveLyricsResultDto } from './lyrics-studio-ipc.js';
 import type { ArtworkDto, AttachArtworkResultDto, AttachLyricsResultDto, DetachArtworkResultDto, DetachLyricsResultDto, LyricsDto, TrackRefRequest } from './track-detail-ipc.js';
 import type {
   EnqueueRequest,
@@ -152,6 +154,10 @@ export interface PlaybackIpcContract {
   'track:attachArtwork': { request: TrackRefRequest; response: IpcResult<AttachArtworkResultDto> };
   /** Removes a cover attached by hand. */
   'track:detachArtwork': { request: TrackRefRequest; response: IpcResult<DetachArtworkResultDto> };
+  /** v0.12.0: looks for lyrics text online (the only network call in the app; main-side, host-pinned). */
+  'lyrics:search': { request: LyricsSearchRequest; response: IpcResult<LyricsSearchResultDto> };
+  /** v0.12.0: saves a finished timed lyrics text beside the song (and in the app). */
+  'lyrics:save': { request: SaveLyricsRequest; response: IpcResult<SaveLyricsResultDto> };
 }
 
 export interface PingRequest {
@@ -261,6 +267,8 @@ export const IPC_INVOKE_CHANNELS = [
   'track:detachLyrics',
   'track:attachArtwork',
   'track:detachArtwork',
+  'lyrics:search',
+  'lyrics:save',
   'favorites:list',
   'favorites:ids',
   'favorites:set',

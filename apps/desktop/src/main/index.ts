@@ -1,6 +1,7 @@
-import { app, BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, net, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
 import path from 'node:path';
 import fsPromises from 'node:fs/promises';
+import fsSync from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PLAYLIST_LIMITS, WALLPAPER_LIMITS } from '@nova/shared';
 import {
@@ -10,6 +11,8 @@ import {
   createLibraryServices,
   createMediaAccess,
   createTrackSidecars,
+  createLrclibProvider,
+  createFixtureProvider,
   readEmbeddedPicture,
   readFileBounded,
   createPlaybackApplication,
@@ -37,6 +40,7 @@ import { registerCollectionsIpc } from './ipc/register-collections-ipc.js';
 import { createNativeImageResizer, createWallpaperPorts, wallpaperDirectory } from './media/electron-images.js';
 import type { AppShell } from './shell/app-shell.js';
 import { createElectronShell } from './shell/electron-shell.js';
+import { createPinnedFetchText, writeLrcAtomic } from './lyrics/lyrics-ports.js';
 import { audioPathFromArgs, createFileOpener } from './shell/open-file.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +150,19 @@ async function pickLyricsFile(): Promise<string | undefined> {
   const parent = BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
   const result = parent ? await dialog.showOpenDialog(parent, options) : await dialog.showOpenDialog(options);
   return result.canceled ? undefined : result.filePaths[0];
+}
+
+/**
+ * The online lyrics-text provider (v0.12.0). A test hook (`NOVA_LYRICS_FIXTURE` = a JSON file in LRCLIB's shape) swaps in
+ * a canned answer, but never in a packaged app: a shipped build can only ever talk to lrclib.net.
+ */
+function lyricsProvider() {
+  const fixture = process.env.NOVA_LYRICS_FIXTURE;
+  if (!app.isPackaged && fixture !== undefined && fixture !== '') return createFixtureProvider(fsSync.readFileSync(fixture, 'utf8'));
+  return createLrclibProvider(
+    createPinnedFetchText((url, init) => net.fetch(url, init)),
+    `NovaPlayer/${app.getVersion()} (local desktop player)`,
+  );
 }
 
 /** The native "choose a cover picture" dialog for one track (v0.11.3). Only the type filter; the real judgement (type by content, size) is the sidecars'. */
@@ -332,6 +349,7 @@ function startApplication(): void {
     readEmbeddedArtwork: readEmbeddedPicture,
     attachedLyrics: libraryServices.attachedLyricsRepository,
     customCovers: libraryServices.customCoverRepository,
+    writeFile: writeLrcAtomic,
   });
   const trackThumbnails = createTrackThumbnails({
     sidecars: trackSidecars,
@@ -365,6 +383,12 @@ function startApplication(): void {
     pickLyricsFile,
     pickArtworkFile,
     onArtworkChanged: () => trackThumbnails.invalidate(),
+    describeTrack: (trackId) => {
+      const track = libraryServices?.trackRepository.getById(trackId as never);
+      if (track === undefined) return undefined;
+      return { title: track.title, artist: track.artist, ...(track.album !== undefined && { album: track.album }), ...(track.durationSeconds !== undefined && { durationSec: Math.round(track.durationSeconds) }) };
+    },
+    lyricsProvider: lyricsProvider(),
     isTrustedSender,
     log: logError,
   });

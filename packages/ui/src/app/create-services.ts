@@ -5,6 +5,7 @@ import { createCollectionsStore } from '../collections/collections-store.js';
 import { createLibraryStore } from '../library/library-store.js';
 import { createThumbnailCache } from '../media/thumbnail-cache.js';
 import { createWallpaperStore } from '../media/wallpaper-store.js';
+import { createStudioStore } from '../lyricstudio/studio-store.js';
 import { createNowPlayingStore } from '../nowplaying/now-playing-store.js';
 import { createPlaybackStore, type AudioLike } from '../playback/playback-store.js';
 import { createPrefsStore } from '../prefs/prefs-store.js';
@@ -21,6 +22,7 @@ export function createAppServices(bridge: NovaBridge, audio: AudioLike & AudioEl
   const library = createLibraryStore(bridge);
   const playback = createPlaybackStore(bridge, audio);
   const nowPlaying = createNowPlayingStore(bridge, playback);
+  const studio = createStudioStore(bridge, playback, () => void nowPlaying.getState().refreshLyrics());
   const prefs = createPrefsStore();
   const engine = createAudioEngine({ element: audio });
   const audioControls = createAudioControls({ audio, engine, prefs, playback });
@@ -39,5 +41,6 @@ export function createAppServices(bridge: NovaBridge, audio: AudioLike & AudioEl
     visuals,
     thumbnails: createThumbnailCache(bridge),
     ui: createUiStore(),
+    studio,
   };
 }

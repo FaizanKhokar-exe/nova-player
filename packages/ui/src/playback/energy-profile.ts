@@ -91,3 +91,60 @@ export function createProfileLoader(deps: ProfileDeps = browserProfileDeps(), ca
     return work;
   };
 }
+
+/** The song as one mono channel at a low sample rate: all Lyric Studio's analysis needs (the voice band is under 3.5 kHz). */
+export interface MonoSignal {
+  readonly samples: Float32Array;
+  readonly sampleRate: number;
+}
+export const STUDIO_SAMPLE_RATE = 16_000;
+
+/** Averages channels into one. */
+export function mixToMono(channels: readonly Float32Array[]): Float32Array {
+  const first = channels[0];
+  if (first === undefined) return new Float32Array(0);
+  if (channels.length === 1) return first;
+  const out = new Float32Array(first.length);
+  for (const channel of channels) for (let i = 0; i < out.length; i += 1) out[i] = (out[i] ?? 0) + (channel[i] ?? 0) / channels.length;
+  return out;
+}
+
+export interface SignalDeps {
+  readonly fetchBytes: ProfileDeps['fetchBytes'];
+  /** Decodes at `STUDIO_SAMPLE_RATE` (the browser resamples while decoding). */
+  readonly decodeLowRate: (bytes: ArrayBuffer) => Promise<readonly Float32Array[]>;
+}
+
+export function browserSignalDeps(): SignalDeps {
+  return {
+    fetchBytes: browserProfileDeps().fetchBytes,
+    async decodeLowRate(bytes) {
+      const context = new OfflineAudioContext(1, 1, STUDIO_SAMPLE_RATE);
+      const buffer = await context.decodeAudioData(bytes);
+      return Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
+    },
+  };
+}
+
+/** Loads the mono 16 kHz signal of the track behind `url`; remembers only the latest one (it is large). Never throws. */
+export function createSignalLoader(deps: SignalDeps = browserSignalDeps()) {
+  let latest: { readonly trackId: string; readonly work: Promise<MonoSignal | undefined> } | undefined;
+  return (trackId: string, url: string): Promise<MonoSignal | undefined> => {
+    if (latest !== undefined && latest.trackId === trackId) return latest.work;
+    const work = (async (): Promise<MonoSignal | undefined> => {
+      try {
+        const bytes = await deps.fetchBytes(url);
+        if (bytes === undefined) return undefined;
+        const samples = mixToMono(await deps.decodeLowRate(bytes));
+        return samples.length === 0 ? undefined : { samples, sampleRate: STUDIO_SAMPLE_RATE };
+      } catch {
+        return undefined;
+      }
+    })();
+    latest = { trackId, work };
+    void work.then((value) => {
+      if (value === undefined && latest?.work === work) latest = undefined;
+    });
+    return work;
+  };
+}

@@ -497,3 +497,70 @@ describe('v0.11.3: a cover attached by hand', () => {
     await expect(s.attachArtworkFromFile('123e4567-e89b-42d3-a456-426614174000', '/x.png')).rejects.toBeInstanceOf(TrackSidecarError);
   });
 });
+
+describe('v0.12.0: saveLrc (Lyric Studio)', () => {
+  const NEW_LRC = '[00:01.00]one\n[00:03.20]two\n';
+  function memoryStore() {
+    const rows = new Map<string, { text: string; source: string | undefined }>();
+    return {
+      rows,
+      get: (id: string) => rows.get(id)?.text,
+      set: (id: string, text: string, source?: string) => void rows.set(id, { text, source }),
+      delete: (id: string) => rows.delete(id),
+      getSource: (id: string) => rows.get(id)?.source,
+    };
+  }
+  const diskWriter = async (target: string, bytes: Uint8Array): Promise<void> => {
+    if (fs.existsSync(target)) fs.copyFileSync(target, `${target}.bak`);
+    fs.writeFileSync(target, bytes);
+  };
+
+  it('writes <song>.lrc beside the audio, keeps the old one as .bak, and stores it in the app with its source', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    const old = write('music/song.lrc', '[00:09.00]old\n');
+    const attachedLyrics = memoryStore();
+    const result = await sidecars({ attachedLyrics, writeFile: diskWriter }).saveLrc(track.id, NEW_LRC);
+    expect(result).toEqual({ outcome: 'saved-beside' });
+    expect(fs.readFileSync(old, 'utf8')).toBe(NEW_LRC);
+    expect(fs.readFileSync(`${old}.bak`, 'utf8')).toBe('[00:09.00]old\n');
+    expect(attachedLyrics.rows.get(track.id)).toEqual({ text: NEW_LRC, source: old });
+    expect(await sidecars({ attachedLyrics, writeFile: diskWriter }).getLyrics(track.id)).toMatchObject({ status: 'found', attached: true });
+  });
+
+  it('falls back to the app only when writing fails or no writer is given', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    const attachedLyrics = memoryStore();
+    const failing = async (): Promise<void> => {
+      throw new Error('EACCES');
+    };
+    expect(await sidecars({ attachedLyrics, writeFile: failing }).saveLrc(track.id, NEW_LRC)).toEqual({ outcome: 'saved-in-app' });
+    expect(attachedLyrics.rows.get(track.id)).toEqual({ text: NEW_LRC, source: undefined });
+    expect(await sidecars({ attachedLyrics }).saveLrc(track.id, NEW_LRC)).toEqual({ outcome: 'saved-in-app' });
+  });
+
+  it('refuses text without a timed line, text over 1 MiB, and unknown tracks', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    const s = sidecars({ attachedLyrics: memoryStore(), writeFile: diskWriter });
+    expect(await s.saveLrc(track.id, 'just words\nno times')).toEqual({ outcome: 'invalid' });
+    expect(await s.saveLrc(track.id, `[00:01.00]${'x'.repeat(MAX_LYRICS_BYTES)}`)).toEqual({ outcome: 'too-large' });
+    await expect(s.saveLrc('not-an-id', NEW_LRC)).rejects.toBeInstanceOf(TrackSidecarError);
+  });
+
+  it('never writes through a .lrc link that leads outside the root', async () => {
+    kit.addRoot('music');
+    const track = kit.addTrack('music/song.mp3');
+    const outside = path.join(kit.sandbox, 'outside.lrc');
+    fs.writeFileSync(outside, '[00:01.00]secret\n');
+    try {
+      fs.symlinkSync(outside, path.join(kit.sandbox, 'music/song.lrc'));
+    } catch {
+      return; // no symlink support here
+    }
+    const result = await sidecars({ attachedLyrics: memoryStore(), writeFile: diskWriter }).saveLrc(track.id, NEW_LRC);
+    expect(result).toEqual({ outcome: 'saved-in-app' });
+    expect(fs.readFileSync(outside, 'utf8')).toBe('[00:01.00]secret\n');
+  });
+});

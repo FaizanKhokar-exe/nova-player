@@ -50,7 +50,7 @@ describe('the playback IPC contract', () => {
   });
 
   it('the Phase 5/6/11 browse, queue, lyrics, artwork and collections contracts declare no path-like field either', () => {
-    for (const name of ['browse-ipc.ts', 'track-detail-ipc.ts', 'collections-ipc.ts']) {
+    for (const name of ['browse-ipc.ts', 'track-detail-ipc.ts', 'collections-ipc.ts', 'lyrics-studio-ipc.ts']) {
       const file = path.resolve(path.dirname(sharedSource), name);
       const code = fs.readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
       expect(code, name).not.toMatch(/\b\w*(path|Path|file|File|directory|Dir|absolute)\w*\??\s*:/);

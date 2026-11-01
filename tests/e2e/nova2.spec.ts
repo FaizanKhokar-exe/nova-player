@@ -562,3 +562,75 @@ test('lyrics attached from a file follow edits to that file when the window come
   await expect(window.getByTestId('lyric-line')).toHaveCount(3);
   await app.close();
 });
+
+
+/* ---------------------------------- v0.12.0: Lyric Studio ---------------------------------- */
+
+test('Lyric Studio: find words online (canned answer), estimate timing, stamp, save a .lrc next to the song, and the lyrics appear', async () => {
+  const fixture = path.join(box.sandbox, 'lrclib.json');
+  fs.writeFileSync(fixture, JSON.stringify([
+    { id: 7, trackName: 'Alpha', artistName: 'Karan', albumName: 'Covers', duration: 30, instrumental: false, plainLyrics: 'first line of the song\nsecond line here\nthird and last line', syncedLyrics: null },
+    { id: 8, trackName: 'Alpha (other)', artistName: 'Nobody', albumName: '', duration: 200, instrumental: false, plainLyrics: 'something else' },
+  ]));
+  process.env['NOVA_LYRICS_FIXTURE'] = fixture;
+  const { app, window } = await openApp();
+  delete process.env['NOVA_LYRICS_FIXTURE'];
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+
+  // A song with no lyrics offers to create them, from the player bar.
+  await window.getByTestId('player-bar').getByTestId('lyrics-create').click({ timeout: 15_000 });
+  await expect(window.getByTestId('lyric-studio')).toBeVisible();
+  await expect(window.getByTestId('studio-consent')).toBeVisible(); // nothing is sent until the listener presses Search
+  await window.getByTestId('studio-search').click();
+  await expect(window.getByTestId('studio-candidate')).toHaveCount(2, { timeout: 10_000 });
+  await expect(window.getByTestId('studio-candidate').first()).toContainText(/\d+% match/);
+  await shot(window, '12-studio-source');
+  await window.getByTestId('studio-use-words').first().click();
+  await expect(window.getByTestId('studio-line-count')).toHaveText(/3 lines/);
+  await window.getByTestId('studio-begin').click();
+  await expect(window.getByTestId('studio-rows')).toBeVisible({ timeout: 30_000 });
+  await expect(window.getByTestId('studio-row')).toHaveCount(3);
+  await shot(window, '13-studio-timing');
+
+  // Keyboard: select line 2, stamp it now (the playhead is wherever the song is), then save.
+  await window.keyboard.press('ArrowDown');
+  await window.keyboard.press('Enter');
+  await expect(window.getByTestId('studio-row').nth(1)).toHaveAttribute('data-locked', 'true');
+  await expect(window.getByTestId('studio-row').nth(2)).toHaveAttribute('data-selected', 'true');
+  await window.getByTestId('studio-save').click();
+  await expect(window.getByTestId('studio-save-result')).toContainText('Saved next to the song', { timeout: 10_000 });
+
+  const written = fs.readFileSync(path.join(box.music, 'Alpha.lrc'), 'utf8');
+  expect(written).toMatch(/^\[ti:Alpha\]\n\[ar:[^\]]+\]\n\[by:Nova Player Lyric Studio\]\n\[\d\d:\d\d\.\d\d\]first line of the song\n\[\d\d:\d\d\.\d\d\]second line here\n\[\d\d:\d\d\.\d\d\]third and last line\n$/);
+
+  // Closing leaves the song with real lyrics.
+  await window.getByTestId('studio-close').click();
+  await expect(window.getByTestId('lyric-studio')).toHaveCount(0);
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await expect(window.getByTestId('lyric-line')).toHaveCount(3, { timeout: 10_000 });
+  await expect(window.getByTestId('lyric-line').first()).toHaveText('first line of the song');
+  await app.close();
+});
+
+test('Lyric Studio: pasted words in Urdu and Hindi work, an unsaved timing asks before it is discarded, and no .lrc is written without Save', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await window.getByTestId('create-lyrics').click({ timeout: 15_000 });
+  await window.getByTestId('studio-text').fill('دل کی بات سنو\nप्यार भरे गीत\nਤੇਰੇ ਬਿਨਾ ਜੀਣਾ\ntere bina jeena');
+  await expect(window.getByTestId('studio-line-count')).toHaveText(/4 lines/);
+  await window.getByTestId('studio-begin').click();
+  await expect(window.getByTestId('studio-row')).toHaveCount(4, { timeout: 30_000 });
+  await expect(window.getByTestId('studio-row').nth(0)).toContainText('دل کی بات سنو');
+  await window.getByTestId('studio-row').nth(2).click();
+  await window.keyboard.press('ArrowRight'); // nudge +0.1 s locks the line
+  await expect(window.getByTestId('studio-row').nth(2)).toHaveAttribute('data-locked', 'true');
+  await window.keyboard.press('Escape');
+  await expect(window.getByTestId('studio-confirm')).toBeVisible();
+  await window.getByTestId('studio-discard').click();
+  await expect(window.getByTestId('lyric-studio')).toHaveCount(0);
+  expect(fs.existsSync(path.join(box.music, 'Alpha.lrc'))).toBe(false);
+  await app.close();
+});

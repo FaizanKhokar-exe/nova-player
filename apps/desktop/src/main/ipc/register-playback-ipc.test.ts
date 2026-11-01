@@ -28,6 +28,7 @@ interface Harness {
   /** What the fake file dialog returns next (`undefined` = the listener cancelled) and how often it was opened. */
   dialog: { next: string | undefined; opened: number };
   artworkChanged: { count: number };
+  providerQueries: { title: string; artist: string }[];
 }
 
 function harness(): Harness {
@@ -92,9 +93,14 @@ function harness(): Harness {
       sidecarCalls.push(`detachArt:${id}`);
       return true;
     },
+    saveLrc: async (id: string, text: string) => {
+      sidecarCalls.push(`saveLrc:${id}:${text.length}`);
+      return { outcome: text.includes('[') ? ('saved-beside' as const) : ('invalid' as const) };
+    },
   };
   const artworkChanged = { count: 0 };
-  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), pickArtworkFile: async () => (dialog.opened++, '/picked/cover.png'), onArtworkChanged: () => void (artworkChanged.count += 1), isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
+  const providerQueries: { title: string; artist: string }[] = [];
+  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), pickArtworkFile: async () => (dialog.opened++, '/picked/cover.png'), onArtworkChanged: () => void (artworkChanged.count += 1), describeTrack: (id: string) => (tracks.some((t) => t.id === id) ? { title: 'Imagine', artist: 'John Lennon', durationSec: 183 } : undefined), lyricsProvider: { search: async (q) => { providerQueries.push(q); return { status: 'ok' as const, candidates: [] }; } }, isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
   return {
     tracks,
     library,
@@ -106,6 +112,7 @@ function harness(): Harness {
     sidecarState,
     dialog,
     artworkChanged,
+    providerQueries,
     call: async (channel, request, event = TRUSTED) => (await handlers.get(channel)!(event, request)) as IpcResult<unknown>,
   };
 }
@@ -117,12 +124,12 @@ beforeEach(() => {
 
 // Phase 11 deliberately moved these two to registerCollectionsIpc (they need the collections / thumbnail services); the pinned list here follows, the count stays 20.
 const COLLECTIONS_OWNED: readonly string[] = ['playback:playList', 'track:getThumbnail'];
-const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playback:') || c.startsWith('track:')) && !COLLECTIONS_OWNED.includes(c));
+const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playback:') || c.startsWith('track:') || c.startsWith('lyrics:')) && !COLLECTIONS_OWNED.includes(c));
 
 describe('registration', () => {
   it('registers exactly the playback channels in the contract, once each', () => {
     expect([...h.handlers.keys()].sort()).toEqual([...PLAYBACK_CHANNELS].sort());
-    expect(PLAYBACK_CHANNELS).toHaveLength(22); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork
+    expect(PLAYBACK_CHANNELS).toHaveLength(24); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork; v0.12.0 lyrics:search / lyrics:save
   });
 
   it('refuses every channel for an untrusted sender, before validating or running anything', async () => {
@@ -479,5 +486,29 @@ describe('v0.11.3: track:attachArtwork and track:detachArtwork', () => {
     expect(h.dialog.opened).toBe(0);
     expect(await h.call('track:detachArtwork', { trackId: id() })).toEqual({ ok: true, value: { removed: true } });
     expect(h.artworkChanged.count).toBe(1);
+  });
+});
+
+describe('v0.12.0: lyrics:search and lyrics:save', () => {
+  it('searches by the track\'s own tags, or by the listener\'s correction, and returns what was asked', async () => {
+    const trackId = h.tracks[0]!.id;
+    expect(await h.call('lyrics:search', { trackId })).toEqual({ ok: true, value: { status: 'ok', title: 'Imagine', artist: 'John Lennon', candidates: [] } });
+    expect(await h.call('lyrics:search', { trackId, title: ' Jealous Guy ', artist: '' })).toMatchObject({ ok: true, value: { title: 'Jealous Guy', artist: '' } });
+    expect(h.providerQueries).toMatchObject([{ title: 'Imagine', artist: 'John Lennon' }, { title: 'Jealous Guy', artist: '' }]);
+  });
+  it('refuses untrusted senders, extra fields, over-long text and unknown tracks without searching', async () => {
+    const trackId = h.tracks[0]!.id;
+    expect(await h.call('lyrics:search', { trackId }, { trusted: false })).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    expect(await h.call('lyrics:search', { trackId, url: 'https://evil.example' })).toMatchObject({ ok: false });
+    expect(await h.call('lyrics:search', { trackId, title: 'x'.repeat(201) })).toMatchObject({ ok: false });
+    expect(await h.call('lyrics:search', { trackId: '123e4567-e89b-42d3-a456-426614174000' })).toMatchObject({ ok: true, value: { status: 'error', candidates: [] } });
+    expect(h.providerQueries).toHaveLength(0);
+  });
+  it('saves through the sidecars and validates the request', async () => {
+    const trackId = h.tracks[0]!.id;
+    expect(await h.call('lyrics:save', { trackId, lrc: '[00:01.00]hi' })).toEqual({ ok: true, value: { outcome: 'saved-beside' } });
+    expect(await h.call('lyrics:save', { trackId, lrc: 'no times' })).toEqual({ ok: true, value: { outcome: 'invalid' } });
+    expect(await h.call('lyrics:save', { trackId, lrc: 5 })).toMatchObject({ ok: false });
+    expect(await h.call('lyrics:save', { trackId, lrc: '[00:01.00]hi' }, { trusted: false })).toMatchObject({ ok: false, error: { code: 'forbidden' } });
   });
 });

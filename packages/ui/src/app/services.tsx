@@ -8,6 +8,7 @@ import type { CollectionsStoreApi } from '../collections/collections-store.js';
 import type { LibraryStoreApi } from '../library/library-store.js';
 import type { ThumbnailCache } from '../media/thumbnail-cache.js';
 import type { WallpaperStoreApi } from '../media/wallpaper-store.js';
+import type { StudioStoreApi } from '../lyricstudio/studio-store.js';
 import type { NowPlayingStoreApi } from '../nowplaying/now-playing-store.js';
 import type { PlaybackStoreApi } from '../playback/playback-store.js';
 import type { PrefsStoreApi, PrefsState } from '../prefs/prefs-store.js';
@@ -33,6 +34,7 @@ export interface AppServices {
   readonly visuals: VisualBus;
   readonly thumbnails: ThumbnailCache;
   readonly ui: UiStoreApi;
+  readonly studio: StudioStoreApi;
 }
 
 export const ServicesContext = createContext<AppServices | undefined>(undefined);

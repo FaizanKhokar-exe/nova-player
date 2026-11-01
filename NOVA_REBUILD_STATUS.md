@@ -1026,3 +1026,23 @@ The user installed 0.11.0 on a real Windows PC and reported the first batch. Cha
   (it was set on the whole Now Playing screen, forcing every lyric line to restyle every frame) and the glow fades a fixed gradient with `opacity` (compositor-only) instead of repainting one;
   idle-cursor timer is re-armed at most every 150 ms; SQLite `temp_store=MEMORY` and a 20 MB page cache. Visual quality is unchanged. I could not measure GPU cost on real Windows hardware.
 - Deliberate test changes: `library-services.test.ts` key list (+`customCoverRepository`), `electron-runtime.test.ts` source list (+`custom-media-schema`), collections upgrade test uses `MIGRATIONS.length`, IPC channel counts 20→22.
+
+## Phase 15 — Lyric Studio (v0.12.0)
+For a song with no lyrics: **find or paste the words, let Nova Player estimate when each line starts from the song itself, fix what is off while listening, save a `.lrc`.**
+Entry points: the sparkle button in the player bar (only when the playing song has no lyrics) and "Create synced lyrics…" in Now Playing's empty lyrics panel.
+
+- **Words:** online search (LRCLIB catalogue, `lyrics:search`) or paste (any script). The search is the ONLY network access in the app: made by main, host pinned to `lrclib.net`, HTTPS only, no redirects, 8 s timeout,
+  4 MiB cap, response shape-checked; it sends only title/artist/album/length of one song, only when the listener presses Search, and a one-time notice says so (`lyricsSearchConsent` pref).
+  Results are ranked by title/artist/length agreement; a result that carries its own timestamps can be used as the starting timing ("Words + its timing"; parsed in main by the domain parser).
+- **Timing (all offline, no model):** `packages/ui/src/lyricstudio/` — the playing song is decoded to mono 16 kHz (`playbackStore.monoSignal()`), a 250–3500 Hz band-pass → 20 ms loudness curve normalised by the song's own floor/ceiling,
+  onset curve, hysteresis phrase detector (`vocal-features.ts`); script-aware syllable weights for Latin / Roman Urdu-Hindi, Devanagari, Gurmukhi, Arabic script (Urdu), CJK, Hangul, Cyrillic, Greek (`syllables.ts`);
+  a monotonic dynamic programme chooses each line's start from onset peaks / phrase starts / a weak grid so that each line's share of voiced time matches its weight, rewarding starts on onsets and after pauses (`align.ts`).
+  Locked lines are kept exactly and the lines between locks are re-solved. Every line gets a confidence; lines under 0.45 are flagged "check".
+- **Live editor:** Space play/pause, Enter (or T) stamps the selected line as it begins (about 0.12 s of human lag is removed, then it snaps to the strongest onset within ±0.25 s), ↑/↓ select, ←/→ nudge 0.1 s (Shift 0.5 s),
+  A plays from the line (0.7 s pre-roll), L lock, Ctrl+Z undo, global ±0.5 s shift, Re-estimate. The global key handler is suspended while the studio is open. Closing an unsaved timing asks first.
+- **Saving (`lyrics:save`):** the text is validated with the domain parser, then written next to the song as `<song>.lrc` (temp file + rename; an existing `.lrc` is kept as `.lrc.bak`) ONLY if that place resolves inside the track's registered folder
+  and is not a link out of it; otherwise (or if the folder is read-only) it is kept inside the app only. Either way it is stored as the track's attached lyrics, so it shows at once.
+- Deliberate changes: new channels `lyrics:search` / `lyrics:save` (playback registrar now owns 24 channels); renderer boundary: still no `.lrc` parsing and no sorting/splicing in UI code (the studio uses insertion-free algorithms and main parses synced text); a final "e" counts as a syllable (Roman Urdu sings it).
+- **Honest limits:** the engine is tested on SYNTHETIC signals only (tones over a bass hum, with and without pauses, an instrumental gap, silence) — accuracy on real mixed music is unverified here and will vary:
+  it measures "loud in the voice band", so guitars/snares can fool it, and it works best on songs with clear pauses between lines. The online provider was NOT reachable from the build container, so it is tested against recorded-shape fixtures only
+  (real-network behaviour, rate limits and LRCLIB's data quality are unverified). Windows behaviour is unverified.

@@ -33,6 +33,8 @@ export interface Prefs {
   readonly lyricsBackdrop: LyricsBackdrop;
   /** Blur the lines that are not being sung (Apple-style depth). */
   readonly lyricsDepthBlur: boolean;
+  /** The listener agreed to let Lyric Studio send a song's title/artist to lrclib.net when they press Search. */
+  readonly lyricsSearchConsent: boolean;
 }
 
 export interface PrefsActions {
@@ -49,6 +51,7 @@ export interface PrefsActions {
   setWallpaperBlur(value: number): void;
   setLyricsBackdrop(value: LyricsBackdrop): void;
   setLyricsDepthBlur(value: boolean): void;
+  setLyricsSearchConsent(value: boolean): void;
   resetAll(): void;
 }
 
@@ -68,6 +71,7 @@ export const DEFAULT_PREFS: Prefs = {
   wallpaperBlur: 8,
   lyricsBackdrop: 'particles',
   lyricsDepthBlur: true,
+  lyricsSearchConsent: false,
 };
 
 const KEY = 'nova.prefs.v1';
@@ -107,6 +111,7 @@ function sanitize(raw: unknown): Prefs {
     wallpaperBlur: num(p.wallpaperBlur, DEFAULT_PREFS.wallpaperBlur, WALLPAPER_BLUR_RANGE.min, WALLPAPER_BLUR_RANGE.max),
     lyricsBackdrop: oneOf(p.lyricsBackdrop, ['particles', 'aurora', 'plain'], DEFAULT_PREFS.lyricsBackdrop),
     lyricsDepthBlur: typeof p.lyricsDepthBlur === 'boolean' ? p.lyricsDepthBlur : DEFAULT_PREFS.lyricsDepthBlur,
+    lyricsSearchConsent: p.lyricsSearchConsent === true,
   };
 }
 
@@ -140,6 +145,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
     setWallpaperBlur: (value) => set({ wallpaperBlur: clamp(Math.round(value), WALLPAPER_BLUR_RANGE.min, WALLPAPER_BLUR_RANGE.max) }),
     setLyricsBackdrop: (lyricsBackdrop) => set({ lyricsBackdrop }),
     setLyricsDepthBlur: (lyricsDepthBlur) => set({ lyricsDepthBlur }),
+    setLyricsSearchConsent: (lyricsSearchConsent) => set({ lyricsSearchConsent }),
     resetAll: () => set({ ...DEFAULT_PREFS }),
   }));
   store.subscribe((s) => {
@@ -157,6 +163,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
         wallpaperBlur: s.wallpaperBlur,
         lyricsBackdrop: s.lyricsBackdrop,
         lyricsDepthBlur: s.lyricsDepthBlur,
+        lyricsSearchConsent: s.lyricsSearchConsent,
       };
       storage?.setItem(KEY, JSON.stringify(value));
     } catch {

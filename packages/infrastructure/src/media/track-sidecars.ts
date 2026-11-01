@@ -69,6 +69,9 @@ export interface CustomCoverStore {
   delete(trackId: string): boolean;
 }
 
+/** What happened when a finished timed lyrics text was saved for a track (v0.12.0). */
+export type SaveLrcResult = { readonly outcome: 'saved-beside' | 'saved-in-app' | 'invalid' | 'too-large' | 'unavailable' };
+
 export type AttachArtworkResult = { readonly outcome: 'attached' } | { readonly outcome: 'not-an-image' | 'unreadable' | 'too-large' | 'unavailable' };
 
 /**
@@ -115,6 +118,13 @@ export interface TrackSidecars {
   detachLyrics(trackId: string): Promise<boolean>;
   /** Attaches the picture at `filePath` (chosen in a dialog by main) as this track's cover. @throws TrackSidecarError `invalid-id` | `track-not-found`. */
   attachArtworkFromFile(trackId: string, filePath: string): Promise<AttachArtworkResult>;
+  /**
+   * Saves a finished timed lyrics text for the track (v0.12.0): parsed first (no timed line = `invalid`), then written
+   * beside the audio file as `<song>.lrc` - atomically, an existing file kept as `<song>.lrc.bak` - ONLY when that
+   * place resolves inside the track's registered root; otherwise (or when writing fails) it is stored in the app only.
+   * @throws TrackSidecarError `invalid-id` | `track-not-found`.
+   */
+  saveLrc(trackId: string, lrcText: string): Promise<SaveLrcResult>;
   /** Removes a picture attached by hand (embedded / folder covers show again). `true` when one was removed. */
   detachArtwork(trackId: string): Promise<boolean>;
 }
@@ -131,6 +141,8 @@ export interface TrackSidecarsDependencies {
   readonly attachedLyrics?: AttachedLyricsStore;
   /** Pictures attached by hand. */
   readonly customCovers?: CustomCoverStore;
+  /** Writes `bytes` to `target` atomically (temp file + rename), first copying an existing `target` to `${target}.bak`. Without it lyrics are saved in the app only. */
+  readonly writeFile?: (target: string, bytes: Uint8Array) => Promise<void>;
 }
 
 function stripExtension(filePath: string): string {
@@ -148,7 +160,7 @@ function inside(root: string, candidate: string): boolean {
 }
 
 export function createTrackSidecars(dependencies: TrackSidecarsDependencies): TrackSidecars {
-  const { mediaAccess, libraryRootRepository, fileSystem, readFile, readEmbeddedArtwork, attachedLyrics, customCovers } = dependencies;
+  const { mediaAccess, libraryRootRepository, fileSystem, readFile, readEmbeddedArtwork, attachedLyrics, customCovers, writeFile } = dependencies;
 
   async function resolve(rawId: string): Promise<{ filePath: CanonicalPath; realRoot: string } | 'unavailable'> {
     if (typeof rawId !== 'string' || parseTrackId(rawId) === undefined) throw new TrackSidecarError('invalid-id', 'That is not a valid track id.');
@@ -271,6 +283,39 @@ export function createTrackSidecars(dependencies: TrackSidecarsDependencies): Tr
       if (parsed.lines.length === 0) return { outcome: 'empty' };
       attachedLyrics.set(rawId, text, filePath);
       return { outcome: 'attached', lines: parsed.lines };
+    },
+
+    async saveLrc(rawId, lrcText) {
+      const located = await resolve(rawId); // throws for an invalid or unknown track
+      if (located === 'unavailable' || attachedLyrics === undefined) return { outcome: 'unavailable' };
+      const bytes = new TextEncoder().encode(lrcText);
+      if (bytes.length > MAX_LYRICS_BYTES) return { outcome: 'too-large' };
+      if (parseLyrics(lrcText).lines.length === 0) return { outcome: 'invalid' };
+      const target = `${stripExtension(located.filePath)}.lrc`;
+      let beside = false;
+      if (writeFile !== undefined) {
+        try {
+          // The folder must be inside the root, and an existing .lrc must not be a link that leads out of it.
+          const folder = await fileSystem.realPath(path.dirname(target));
+          if (inside(located.realRoot, folder)) {
+            let safe = true;
+            try {
+              const existing = await fileSystem.realPath(target);
+              safe = inside(located.realRoot, existing);
+            } catch (error) {
+              if (!(error instanceof FileSystemError)) throw error; // no such file: a fresh write is fine
+            }
+            if (safe) {
+              await writeFile(target, bytes);
+              beside = true;
+            }
+          }
+        } catch {
+          beside = false; // read-only folder, disk full, permissions...: keep it in the app
+        }
+      }
+      attachedLyrics.set(rawId, lrcText, beside ? target : undefined);
+      return { outcome: beside ? 'saved-beside' : 'saved-in-app' };
     },
 
     async detachLyrics(rawId) {

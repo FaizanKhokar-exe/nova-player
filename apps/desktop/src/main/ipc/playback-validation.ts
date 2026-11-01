@@ -10,6 +10,8 @@ import type {
   SetRepeatModeRequest,
   SetShuffleRequest,
   TrackFinishedRequest,
+  LyricsSearchRequest,
+  SaveLyricsRequest,
 } from '@nova/shared';
 import { validateGroupRef } from './browse-validation.js';
 import { validateListSource } from './collections-validation.js';
@@ -116,4 +118,29 @@ export function validateTrackRef(raw: unknown): TrackRefRequest {
   const record = objectOf(raw, 'a "trackId"');
   rejectUnknownKeys(record, ['trackId']);
   return { trackId: trackIdField(record, 'trackId') };
+}
+
+export const MAX_SEARCH_TEXT = 200;
+/** One MiB of UTF-16 code units is a safe upper bound on the text; the sidecar service enforces the exact byte limit. */
+export const MAX_LRC_CHARS = 1024 * 1024;
+
+export function validateLyricsSearch(raw: unknown): LyricsSearchRequest {
+  const record = objectOf(raw, 'a "trackId"');
+  rejectUnknownKeys(record, ['trackId', 'title', 'artist']);
+  const out: { trackId: string; title?: string; artist?: string } = { trackId: trackIdField(record, 'trackId') };
+  for (const key of ['title', 'artist'] as const) {
+    const value = record[key];
+    if (value === undefined) continue;
+    if (typeof value !== 'string' || value.length > MAX_SEARCH_TEXT) throw new InvalidRequestError(`"${key}" must be a string of at most ${MAX_SEARCH_TEXT} characters.`);
+    out[key] = value.trim();
+  }
+  return out;
+}
+
+export function validateSaveLyrics(raw: unknown): SaveLyricsRequest {
+  const record = objectOf(raw, 'a "trackId" and "lrc"');
+  rejectUnknownKeys(record, ['trackId', 'lrc']);
+  const lrc = record.lrc;
+  if (typeof lrc !== 'string' || lrc.length > MAX_LRC_CHARS) throw new InvalidRequestError('"lrc" must be text of at most 1 MiB.');
+  return { trackId: trackIdField(record, 'trackId'), lrc };
 }

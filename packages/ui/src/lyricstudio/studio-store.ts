@@ -1,0 +1,305 @@
+import { createStore, type StoreApi } from 'zustand/vanilla';
+import type { IpcResult, LyricsCandidateDto, LyricsSearchResultDto, NovaBridge, SaveLyricsResultDto } from '@nova/shared';
+import type { PlaybackStoreApi } from '../playback/playback-store.js';
+import { alignLines } from './align.js';
+import { buildLrc, splitLyricsText, type PlainLine, type TimedLine } from './lrc-format.js';
+import { overview, snapToOnset, TAP_LAG_MS } from './snap.js';
+import { lineWeight } from './syllables.js';
+import { analyseSignal, type VocalFeatures } from './vocal-features.js';
+
+/**
+ * Lyric Studio's state: find or paste the words, let the app estimate when each line starts from the song itself,
+ * then fix what is off while listening (tap to stamp, nudge, lock), and save a `.lrc`.
+ */
+
+export type StudioStep = 'source' | 'analysing' | 'timing';
+export type SearchStatus = 'idle' | 'searching' | 'done' | 'offline' | 'error' | 'unavailable';
+export type SaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+
+export interface StudioState {
+  readonly open: boolean;
+  readonly step: StudioStep;
+  readonly trackId: string | undefined;
+  readonly title: string;
+  readonly artist: string;
+  readonly queryTitle: string;
+  readonly queryArtist: string;
+  readonly text: string;
+  readonly search: { readonly status: SearchStatus; readonly candidates: readonly LyricsCandidateDto[]; readonly chosenId: number | undefined };
+  /** True when the chosen result brought its own timestamps and the listener asked to start from them. */
+  readonly startFromSynced: boolean;
+  readonly lines: readonly PlainLine[];
+  readonly times: readonly number[];
+  readonly confidence: readonly number[];
+  readonly locks: ReadonlySet<number>;
+  readonly selected: number;
+  readonly progress: number;
+  readonly overview: readonly number[];
+  readonly durationMs: number;
+  /** The song's audio could not be analysed: the times are evenly spaced guesses. */
+  readonly analysisFailed: boolean;
+  readonly canUndo: boolean;
+  readonly save: { readonly status: SaveStatus; readonly outcome: SaveLyricsResultDto['outcome'] | undefined; readonly message: string | undefined };
+
+  openStudio(): void;
+  close(): void;
+  setText(text: string): void;
+  setQuery(title: string, artist: string): void;
+  runSearch(): Promise<void>;
+  pickCandidate(candidate: LyricsCandidateDto, startFromSynced: boolean): void;
+  begin(): Promise<void>;
+  backToSource(): void;
+  select(index: number): void;
+  stamp(): void;
+  nudge(index: number, deltaMs: number): void;
+  setTime(index: number, ms: number): void;
+  toggleLock(index: number): void;
+  reestimate(): void;
+  shiftAll(deltaMs: number): void;
+  undo(): void;
+  audition(index: number): void;
+  saveLrc(): Promise<void>;
+}
+export type StudioStoreApi = StoreApi<StudioState>;
+
+const EMPTY_SAVE = { status: 'idle', outcome: undefined, message: undefined } as const;
+const SAVE_MESSAGES: Record<SaveLyricsResultDto['outcome'], string> = {
+  'saved-beside': 'Saved next to the song as a .lrc file, and in Nova Player.',
+  'saved-in-app': 'Saved in Nova Player. The song’s folder couldn’t be written, so no .lrc file was created next to it.',
+  invalid: 'There is nothing to save yet - no line has a time.',
+  'too-large': 'That lyrics text is too large to save (limit 1 MB).',
+  unavailable: 'Can’t save right now - the song’s folder can’t be reached.',
+};
+const UNREACHABLE = 'Could not reach the application. Try restarting Nova Player.';
+const UNDO_LIMIT = 60;
+const PRE_ROLL_MS = 700;
+
+export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi, onSaved: () => void = () => undefined): StudioStoreApi {
+  let features: VocalFeatures | undefined;
+  let weights: number[] = [];
+  let token = 0;
+  let undoStack: { times: readonly number[]; locks: ReadonlySet<number>; confidence: readonly number[] }[] = [];
+
+  return createStore<StudioState>((set, get) => {
+    const monotonic = (times: readonly number[], duration: number): number[] => {
+      const out: number[] = [];
+      times.forEach((t, i) => out.push(Math.max(i === 0 ? 0 : (out[i - 1] ?? 0), Math.min(duration > 0 ? duration : Number.MAX_SAFE_INTEGER, Math.round(t)))));
+      return out;
+    };
+    const remember = (): void => {
+      const s = get();
+      undoStack = [...undoStack.slice(-(UNDO_LIMIT - 1)), { times: s.times, locks: s.locks, confidence: s.confidence }];
+      set({ canUndo: true });
+    };
+    const fresh = {
+      step: 'source' as StudioStep,
+      text: '',
+      queryTitle: '',
+      queryArtist: '',
+      search: { status: 'idle' as SearchStatus, candidates: [] as readonly LyricsCandidateDto[], chosenId: undefined as number | undefined },
+      startFromSynced: false,
+      lines: [] as readonly PlainLine[],
+      times: [] as readonly number[],
+      confidence: [] as readonly number[],
+      locks: new Set<number>() as ReadonlySet<number>,
+      selected: 0,
+      progress: 0,
+      overview: [] as readonly number[],
+      durationMs: 0,
+      analysisFailed: false,
+      canUndo: false,
+      save: EMPTY_SAVE as StudioState['save'],
+    };
+    let syncedLines: TimedLine[] | undefined;
+
+    function resolveFrom(fromIndex: number): void {
+      const s = get();
+      if (features === undefined) return;
+      const anchors = new Map<number, number>();
+      for (let i = 0; i < fromIndex && i < s.times.length; i += 1) anchors.set(i, s.times[i] ?? 0);
+      for (const i of s.locks) anchors.set(i, s.times[i] ?? 0);
+      const result = alignLines(weights, features, { anchors, breakBefore: s.lines.map((l) => l.breakBefore) });
+      const confidence = result.confidence.map((c, i) => (s.locks.has(i) ? 1 : i < fromIndex ? (s.confidence[i] ?? c) : c));
+      set({ times: monotonic(result.startsMs, s.durationMs), confidence });
+    }
+
+    return {
+      open: false,
+      trackId: undefined,
+      title: '',
+      artist: '',
+      ...fresh,
+
+      openStudio() {
+        const current = playback.getState().session?.current;
+        if (current === undefined) return;
+        token += 1;
+        features = undefined;
+        undoStack = [];
+        syncedLines = undefined;
+        set({ ...fresh, open: true, trackId: current.track.id, title: current.track.title, artist: current.track.artist, queryTitle: current.track.title, queryArtist: current.track.artist, locks: new Set<number>() });
+      },
+      close() {
+        token += 1; // abandons any analysis in flight
+        features = undefined;
+        undoStack = [];
+        syncedLines = undefined;
+        set({ ...fresh, open: false, trackId: undefined, locks: new Set<number>() });
+      },
+      setText: (text) => set({ text, startFromSynced: false, save: EMPTY_SAVE }),
+      setQuery: (queryTitle, queryArtist) => set({ queryTitle, queryArtist }),
+
+      async runSearch() {
+        const s = get();
+        if (s.trackId === undefined || s.search.status === 'searching') return;
+        const mine = token;
+        set({ search: { status: 'searching', candidates: [], chosenId: undefined } });
+        let result: IpcResult<LyricsSearchResultDto> | undefined;
+        try {
+          result = (await bridge.invoke('lyrics:search', { trackId: s.trackId, title: s.queryTitle, artist: s.queryArtist })) as IpcResult<LyricsSearchResultDto>;
+        } catch {
+          result = undefined;
+        }
+        if (mine !== token) return;
+        if (result?.ok === true) set({ search: { status: result.value.status === 'ok' ? 'done' : result.value.status, candidates: result.value.candidates, chosenId: undefined } });
+        else set({ search: { status: result === undefined ? 'offline' : 'error', candidates: [], chosenId: undefined } });
+      },
+
+      pickCandidate(candidate, startFromSynced) {
+        const timed: TimedLine[] = candidate.syncedLines === undefined ? [] : candidate.syncedLines.map((l) => ({ timeMs: l.timeMs, text: l.text }));
+        const useSynced = startFromSynced && timed.length > 0;
+        syncedLines = useSynced ? timed : undefined;
+        const text = candidate.plain.trim() !== '' ? candidate.plain : timed.map((l) => l.text).join('\n');
+        set({ text: useSynced ? timed.map((l) => l.text).join('\n') : text, startFromSynced: useSynced, search: { ...get().search, chosenId: candidate.id } });
+      },
+
+      async begin() {
+        const s = get();
+        const lines = splitLyricsText(s.text);
+        if (lines.length === 0 || s.trackId === undefined) return;
+        const mine = ++token;
+        const useSynced = s.startFromSynced && syncedLines !== undefined && syncedLines.length === lines.length;
+        weights = lines.map((l) => lineWeight(l.text));
+        undoStack = [];
+        set({ step: 'analysing', lines, progress: 0, analysisFailed: false, canUndo: false, locks: new Set<number>(), selected: 0, save: EMPTY_SAVE });
+        const signal = await playback.getState().monoSignal();
+        if (mine !== token) return;
+        const engineDuration = playback.getState().engine.durationMs ?? 0;
+        let analysed: VocalFeatures | undefined;
+        if (signal !== undefined) analysed = await analyseSignal(signal.samples, signal.sampleRate, { onProgress: (progress) => mine === token && set({ progress }), isCancelled: () => mine !== token });
+        if (mine !== token) return;
+        const failed = analysed === undefined;
+        const duration = analysed?.durationMs ?? engineDuration;
+        features =
+          analysed ??
+          ({ frameMs: 20, durationMs: duration, level: new Float32Array(0), onset: new Float32Array(0), active: new Uint8Array(0), activeCum: new Float32Array(1), phrases: [] } satisfies VocalFeatures);
+        const result = alignLines(weights, features, { breakBefore: lines.map((l) => l.breakBefore) });
+        const times = useSynced && syncedLines !== undefined ? syncedLines.map((l) => l.timeMs) : [...result.startsMs];
+        set({
+          step: 'timing',
+          times: monotonic(times, duration),
+          confidence: useSynced ? times.map(() => 0.8) : result.confidence,
+          durationMs: duration,
+          overview: failed ? [] : overview(features, 480),
+          analysisFailed: failed,
+        });
+      },
+
+      backToSource() {
+        token += 1;
+        set({ step: 'source', save: EMPTY_SAVE });
+      },
+      select: (selected) => set({ selected: Math.max(0, Math.min(get().lines.length - 1, selected)) }),
+
+      stamp() {
+        const s = get();
+        if (s.step !== 'timing' || s.lines.length === 0) return;
+        remember();
+        const raw = playback.getState().livePositionMs() - TAP_LAG_MS;
+        const snapped = features !== undefined && features.onset.length > 0 ? snapToOnset(features, raw) : Math.max(0, Math.round(raw));
+        const times = [...s.times];
+        times[s.selected] = snapped;
+        const locks = new Set(s.locks).add(s.selected);
+        set({ times: monotonic(times, s.durationMs), locks, selected: Math.min(s.lines.length - 1, s.selected + 1) });
+        resolveFrom(s.selected + 1); // the lines after it follow the new anchor
+        set({ confidence: get().confidence.map((c, i) => (i === s.selected ? 1 : c)) });
+      },
+
+      nudge(index, deltaMs) {
+        get().setTime(index, (get().times[index] ?? 0) + deltaMs);
+      },
+
+      setTime(index, ms) {
+        const s = get();
+        if (index < 0 || index >= s.times.length) return;
+        remember();
+        const lower = index > 0 ? (s.times[index - 1] ?? 0) : 0;
+        const upper = index < s.times.length - 1 ? (s.times[index + 1] ?? s.durationMs) : s.durationMs > 0 ? s.durationMs : Number.MAX_SAFE_INTEGER;
+        const times = [...s.times];
+        times[index] = Math.max(lower, Math.min(upper, Math.round(ms)));
+        set({ times, locks: new Set(s.locks).add(index), confidence: s.confidence.map((c, i) => (i === index ? 1 : c)), save: EMPTY_SAVE });
+      },
+
+      toggleLock(index) {
+        const s = get();
+        remember();
+        const locks = new Set(s.locks);
+        if (locks.has(index)) locks.delete(index);
+        else locks.add(index);
+        set({ locks });
+      },
+
+      reestimate() {
+        remember();
+        resolveFrom(0);
+      },
+
+      shiftAll(deltaMs) {
+        const s = get();
+        remember();
+        set({ times: monotonic(s.times.map((t) => t + deltaMs), s.durationMs), save: EMPTY_SAVE });
+      },
+
+      undo() {
+        const last = undoStack[undoStack.length - 1];
+        if (last === undefined) return;
+        undoStack = undoStack.slice(0, -1);
+        set({ times: last.times, locks: last.locks, confidence: last.confidence, canUndo: undoStack.length > 0 });
+      },
+
+      audition(index) {
+        const s = get();
+        const time = s.times[index];
+        if (time === undefined) return;
+        const p = playback.getState();
+        p.seekMs(Math.max(0, time - PRE_ROLL_MS));
+        if (!p.engine.playing) void p.togglePlay();
+        set({ selected: index });
+      },
+
+      async saveLrc() {
+        const s = get();
+        if (s.trackId === undefined || s.step !== 'timing' || s.save.status === 'saving') return;
+        const lrc = buildLrc(
+          s.lines.map((line, i) => ({ timeMs: s.times[i] ?? 0, text: line.text })),
+          { ti: s.title, ar: s.artist, by: 'Nova Player Lyric Studio' },
+        );
+        set({ save: { status: 'saving', outcome: undefined, message: undefined } });
+        let result: IpcResult<SaveLyricsResultDto> | undefined;
+        try {
+          result = (await bridge.invoke('lyrics:save', { trackId: s.trackId, lrc })) as IpcResult<SaveLyricsResultDto>;
+        } catch {
+          result = undefined;
+        }
+        if (result?.ok !== true) {
+          set({ save: { status: 'error', outcome: undefined, message: result === undefined ? UNREACHABLE : result.error.message } });
+          return;
+        }
+        const outcome = result.value.outcome;
+        const saved = outcome === 'saved-beside' || outcome === 'saved-in-app';
+        set({ save: { status: saved ? 'saved' : 'error', outcome, message: SAVE_MESSAGES[outcome] } });
+        if (saved) onSaved();
+      },
+    };
+  });
+}
