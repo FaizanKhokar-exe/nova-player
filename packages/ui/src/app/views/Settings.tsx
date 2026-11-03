@@ -1,10 +1,11 @@
-import { SHORTCUT_HELP } from '../shortcuts.js';
+import { CUSTOMIZABLE, SHORTCUT_HELP, conflictFor, isAssignableKey, keyLabel, type CustomizableId } from '../shortcuts.js';
+import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { EQ_BAND_LABELS, EQ_PRESETS, EQ_MAX_DB, EQ_MIN_DB, matchPreset } from '../../audio/eq-presets.js';
 import { baseName, plural } from '../../library/format.js';
 import { useLibraryStore } from '../../library/LibraryStoreProvider.js';
-import { SPEEDS, WALLPAPER_BLUR_RANGE, WALLPAPER_DIM_RANGE, type PerformanceMode, type VisualizerStyle, type LyricsBackdrop } from '../../prefs/prefs-store.js';
+import { SPEEDS, WALLPAPER_BLUR_RANGE, WALLPAPER_DIM_RANGE, type PerformanceMode, type VisualizerStyle, type LyricsBackdrop, type LyricsAnimation, type LyricsAlign, type LyricsCase, type LyricsFont, type BeatIntensity } from '../../prefs/prefs-store.js';
 import { Icon } from '../../theme/Icon.js';
 import { LYRICS_SIZE_RANGE, SWATCHES } from '../../theme/theme-store.js';
 import { useCollections } from '../../collections/CollectionsStoreProvider.js';
@@ -19,6 +20,42 @@ function Setting({ title, hint, children }: { title: string; hint?: string; chil
         {hint !== undefined && <span className="nx-muted" style={{ fontSize: 13 }}>{hint}</span>}
       </div>
       <div className="nx-setting-control">{children}</div>
+    </div>
+  );
+}
+
+/** Click a key, press the new one. Space and every shortcut work even when a button has focus. */
+function ShortcutEditor() {
+  const { prefs } = useServices();
+  const overrides = usePrefs((s) => s.shortcutOverrides);
+  const [editing, setEditing] = useState<CustomizableId | undefined>(undefined);
+  const [message, setMessage] = useState<string | undefined>(undefined);
+  const capture = (id: CustomizableId, event: React.KeyboardEvent): void => {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.key === 'Escape') { setEditing(undefined); setMessage(undefined); return; }
+    if (!isAssignableKey(event.key)) { setMessage('Use a single letter, symbol or Space (digits and ? are reserved).'); return; }
+    const clash = conflictFor(event.key, id, overrides);
+    if (clash !== undefined) { setMessage(`"${keyLabel(event.key)}" is already used by "${CUSTOMIZABLE.find((e) => e.id === clash)?.label ?? clash}".`); return; }
+    const builtIn = CUSTOMIZABLE.find((e) => e.id === id)?.key;
+    prefs.getState().setShortcut(id, event.key.toLowerCase() === builtIn?.toLowerCase() ? undefined : event.key);
+    setEditing(undefined);
+    setMessage(undefined);
+  };
+  return (
+    <div data-testid="shortcut-editor" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px 28px', marginBottom: 14 }}>
+      {CUSTOMIZABLE.map((entry) => (
+        <div key={entry.id} className="nx-setting" style={{ minHeight: 34 }}>
+          <span className="nx-muted">{entry.label}</span>
+          <span style={{ display: 'inline-flex', gap: 6 }}>
+            <button type="button" className="nx-kbd nx-kbd-btn" data-testid={`shortcut-${entry.id}`} data-keep-focus aria-label={`Change the key for ${entry.label}`} data-editing={editing === entry.id} onClick={() => { setEditing(entry.id); setMessage(undefined); }} onKeyDown={(e) => editing === entry.id && capture(entry.id, e)} onBlur={() => editing === entry.id && setEditing(undefined)}>
+              {editing === entry.id ? 'Press a key…' : keyLabel(overrides[entry.id] ?? entry.key)}
+            </button>
+            {overrides[entry.id] !== undefined && <button type="button" className="nx-kbd nx-kbd-btn" aria-label={`Reset ${entry.label} to ${keyLabel(entry.key)}`} onClick={() => prefs.getState().setShortcut(entry.id, undefined)}>↺</button>}
+          </span>
+        </div>
+      ))}
+      {message !== undefined && <p className="nx-muted" role="status" style={{ gridColumn: '1 / -1', margin: 0, color: 'var(--warn)' }}>{message}</p>}
     </div>
   );
 }
@@ -165,6 +202,22 @@ export function SettingsView() {
           <Chips<LyricsBackdrop> label="Lyrics Mode backdrop" value={p.lyricsBackdrop} options={[{ id: 'particles', label: 'Particles' }, { id: 'aurora', label: 'Aurora glow' }, { id: 'plain', label: 'Still' }]} onChange={(value) => prefs.getState().setLyricsBackdrop(value)} />
         </Setting>
         <Setting title="Blur lines not being sung" hint="Soft depth effect on the surrounding lyrics."><Switch label="Blur lines not being sung" checked={p.lyricsDepthBlur} onChange={(value) => prefs.getState().setLyricsDepthBlur(value)} /></Setting>
+        <Setting title="Line animation" hint="How the next line arrives. Magnet pulls it up with a springy settle; Apple glides; Karaoke lifts and wipes colour.">
+          <Chips<LyricsAnimation> label="Line animation" value={p.lyricsAnimation} onChange={(v) => prefs.getState().setLyricsAnimation(v)} options={[{ id: 'magnet', label: 'Magnet' }, { id: 'apple', label: 'Apple' }, { id: 'karaoke', label: 'Karaoke' }]} />
+        </Setting>
+        <Setting title="Alignment"><Chips<LyricsAlign> label="Lyrics alignment" value={p.lyricsAlign} onChange={(v) => prefs.getState().setLyricsAlign(v)} options={[{ id: 'left', label: 'Left' }, { id: 'center', label: 'Centre' }]} /></Setting>
+        <Setting title="Letter case" hint="Capitals or small text, whatever you like.">
+          <Chips<LyricsCase> label="Letter case" value={p.lyricsCase} onChange={(v) => prefs.getState().setLyricsCase(v)} options={[{ id: 'normal', label: 'Normal' }, { id: 'upper', label: 'CAPS' }, { id: 'lower', label: 'small' }, { id: 'small-caps', label: 'Small caps' }, { id: 'capitalize', label: 'Title Case' }]} />
+        </Setting>
+        <Setting title="Lyrics font"><Chips<LyricsFont> label="Lyrics font" value={p.lyricsFont} onChange={(v) => prefs.getState().setLyricsFont(v)} options={[{ id: 'default', label: 'Default' }, { id: 'serif', label: 'Serif' }, { id: 'rounded', label: 'Rounded' }, { id: 'mono', label: 'Mono' }]} /></Setting>
+        <Setting title="Glow on the sung line" hint="Pulses with the beat."><Switch label="Glow on the sung line" checked={p.lyricsGlow} onChange={(v) => prefs.getState().setLyricsGlow(v)} /></Setting>
+        <Setting title="Beat effect" hint="How strongly the beat moves the cover, glow, particles and lyric glow.">
+          <Chips<BeatIntensity> label="Beat effect" value={p.beatIntensity} onChange={(v) => prefs.getState().setBeatIntensity(v)} options={[{ id: 'off', label: 'Off' }, { id: 'subtle', label: 'Subtle' }, { id: 'normal', label: 'Normal' }, { id: 'strong', label: 'Strong' }]} />
+        </Setting>
+        <Setting title="Fade between songs" hint="Fades out at the end of a song and in at the start of the next (songs under about 20 s are left alone).">
+          <Chips<string> label="Fade between songs" value={String(p.trackFadeSec)} onChange={(v) => prefs.getState().setTrackFadeSec(Number(v))} options={[{ id: '0', label: 'Off' }, { id: '2', label: '2 s' }, { id: '4', label: '4 s' }, { id: '6', label: '6 s' }]} />
+        </Setting>
+        <Setting title="Gentle sleep timer" hint="Lowers the volume over the last 20 seconds before the sleep timer stops the music."><Switch label="Gentle sleep timer" checked={p.sleepFade} onChange={(v) => prefs.getState().setSleepFade(v)} /></Setting>
         <Setting title="Performance" hint="Auto lowers effects by itself on slower computers. Low is the lightest.">
           <Chips<PerformanceMode> label="Performance" value={p.performance} options={[{ id: 'auto', label: 'Auto' }, { id: 'high', label: 'High' }, { id: 'balanced', label: 'Balanced' }, { id: 'low', label: 'Low' }]} onChange={(value) => prefs.getState().setPerformance(value)} />
         </Setting>
@@ -208,6 +261,7 @@ export function SettingsView() {
 
       <section className="nx-card" aria-labelledby="set-keys">
         <h2 className="nx-h2" id="set-keys">Keyboard shortcuts</h2>
+        <ShortcutEditor />
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '10px 28px' }}>
           {SHORTCUT_HELP.map(([name, keys]) => (
             <div key={name} className="nx-setting" style={{ minHeight: 28 }}><span className="nx-muted">{name}</span><kbd className="nx-kbd">{keys}</kbd></div>

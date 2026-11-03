@@ -102,7 +102,7 @@ function AppEffects() {
       if (event.altKey && key === 'ArrowRight') { event.preventDefault(); ui.getState().forward(); return; }
       if (isTyping(event.target)) return;
       const el = event.target as HTMLElement;
-      const action = resolveShortcut({ key, ctrl, shift: event.shiftKey, alt: event.altKey });
+      const action = resolveShortcut({ key, ctrl, shift: event.shiftKey, alt: event.altKey }, prefs.getState().shortcutOverrides);
       if (action === undefined) return;
       const s = ui.getState();
       // Keys that a focused control or list already uses for itself are left to it.
@@ -112,7 +112,7 @@ function AppEffects() {
       const p = playback.getState();
       const state = p;
       switch (action.kind) {
-        case 'togglePlay': if (el.tagName === 'BUTTON') return; event.preventDefault(); void p.togglePlay(); return;
+        case 'togglePlay': if (el.closest('[role="menu"], [role="listbox"], [role="slider"], select') !== null) return; event.preventDefault(); void p.togglePlay(); return; // a focused button never steals Space: shortcuts are shortcuts
         case 'next': event.preventDefault(); void p.next(); return;
         case 'previous': event.preventDefault(); void p.previous(); return;
         case 'seek': if (ownControl || state.session?.current === undefined) return; event.preventDefault(); p.seekMs(Math.max(0, state.positionStore.getState().positionMs + action.deltaSeconds * 1000)); return;
@@ -135,8 +135,27 @@ function AppEffects() {
         }
       }
     };
+    // A button normally "clicks" on the Space KEY-UP. Space is the play/pause shortcut everywhere, so that click is swallowed too.
+    const onKeyUp = (event: KeyboardEvent) => {
+      if (event.key !== ' ' || studio.getState().open || isTyping(event.target)) return;
+      if ((event.target as HTMLElement).closest('[role="menu"], [role="listbox"], [role="slider"], select') !== null) return;
+      event.preventDefault();
+    };
+    // After a MOUSE click a button keeps keyboard focus, which made the next key press act on it. Let go of it (Tab still focuses normally).
+    const onClick = (event: MouseEvent) => {
+      if (event.detail === 0) return; // a keyboard-initiated click keeps its focus
+      const button = (event.target as HTMLElement | null)?.closest?.('button');
+      if (button === null || button === undefined || button.hasAttribute('data-keep-focus') || (button.closest('[role="menu"], [role="dialog"], [role="alertdialog"]') !== null && button.closest('.nx-studio') === null)) return;
+      setTimeout(() => button.blur(), 0);
+    };
     window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    document.addEventListener('click', onClick);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+      document.removeEventListener('click', onClick);
+    };
   }, [ui, playback, prefs, collections, studio]);
 
   // The .lrc may be edited in another program: when the window comes back to the front, the lyrics are re-read (silently, only if they changed).

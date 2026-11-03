@@ -16,6 +16,8 @@ export interface AudioElementLike {
   playbackRate: number;
   defaultPlaybackRate: number;
   preservesPitch?: boolean;
+  currentTime?: number;
+  duration?: number;
 }
 
 export type SleepState =
@@ -50,6 +52,23 @@ export interface AudioControlsDependencies {
   readonly now?: () => number;
   readonly setInterval?: (handler: () => void, ms: number) => unknown;
   readonly clearInterval?: (handle: unknown) => void;
+}
+
+const SLEEP_FADE_MS = 20_000;
+const smooth = (x: number): number => {
+  const c = Math.min(1, Math.max(0, x));
+  return c * c * (3 - 2 * c);
+};
+
+/** The master fade (0..1) for this moment: fade-in at a song's start, fade-out at its end (only for songs long enough to afford both), and the sleep timer's last 20 seconds. */
+export function fadeLevel(input: { positionMs: number; durationMs: number | undefined; fadeSec: number; sleepRemainingMs: number | undefined; sleepFade: boolean }): number {
+  let level = 1;
+  const fadeMs = input.fadeSec * 1000;
+  if (fadeMs > 0 && input.durationMs !== undefined && Number.isFinite(input.durationMs) && input.durationMs > fadeMs * 4) {
+    level = Math.min(level, smooth(input.positionMs / fadeMs), smooth((input.durationMs - input.positionMs) / fadeMs));
+  }
+  if (input.sleepFade && input.sleepRemainingMs !== undefined && input.sleepRemainingMs > 0) level = Math.min(level, smooth(input.sleepRemainingMs / SLEEP_FADE_MS));
+  return level;
 }
 
 export function createAudioControls(dependencies: AudioControlsDependencies): AudioControlsApi {
@@ -124,6 +143,20 @@ export function createAudioControls(dependencies: AudioControlsDependencies): Au
     audio.preservesPitch = true;
   }
 
+  // Smart fade: ~10 times a second, only does work when a fade is asked for (or one just ended and the level must return to 1).
+  let lastFade = 1;
+  const fadeTimer = setInterval(() => {
+    const p = prefs.getState();
+    const sleep = store.getState().sleep;
+    const sleepActive = p.sleepFade && sleep.mode === 'timer';
+    if (p.trackFadeSec === 0 && !sleepActive && lastFade === 1) return;
+    const duration = audio.duration !== undefined && Number.isFinite(audio.duration) ? audio.duration * 1000 : undefined;
+    const level = fadeLevel({ positionMs: (audio.currentTime ?? 0) * 1000, durationMs: duration, fadeSec: p.trackFadeSec, sleepRemainingMs: sleepActive ? store.getState().sleepRemainingMs : undefined, sleepFade: p.sleepFade });
+    if (Math.abs(level - lastFade) < 0.005 && level !== 1) return;
+    lastFade = level;
+    engine.setFade(level);
+  }, 100);
+
   pushSpeed();
   const stopPrefs = prefs.subscribe((state, previous) => {
     if (state.speed !== previous.speed) pushSpeed();
@@ -141,6 +174,7 @@ export function createAudioControls(dependencies: AudioControlsDependencies): Au
 
   return Object.assign(store, {
     dispose() {
+      clearInterval(fadeTimer);
       stopPrefs();
       stopPlayback();
       if (ticker !== undefined) stopTicker(ticker);

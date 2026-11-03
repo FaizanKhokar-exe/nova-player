@@ -47,6 +47,7 @@ function NowPlayingLayer() {
   const reduceMotion = useStore(theme, (s) => s.reduceMotion);
   const backdrop = usePrefs((s) => s.lyricsBackdrop);
   const visualizer = usePrefs((s) => s.visualizer);
+  const beatIntensity = usePrefs((s) => s.beatIntensity);
   const act = playback.getState();
 
   // Make sure the audio graph exists while a visual is on screen.
@@ -56,17 +57,18 @@ function NowPlayingLayer() {
   // not on the whole screen: a custom property changed on the root makes the browser re-resolve the style of every lyric line, every frame.
   useEffect(() => {
     const element = root.current;
-    if (element === null || reduceMotion) return;
+    if (element === null || reduceMotion || beatIntensity === 'off') return;
+    const gain = { off: 0, subtle: 0.5, normal: 1, strong: 1.5 }[beatIntensity];
     const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover, .nx-np-pulse'));
     const off = visuals.subscribe((frame) => {
-      const value = frame.levels.pulse.toFixed(3);
+      const value = Math.min(1, frame.levels.pulse * gain).toFixed(3);
       for (const target of targets) target.style.setProperty('--beat', value);
     });
     return () => {
       off();
       for (const target of targets) target.style.setProperty('--beat', '0');
     };
-  }, [visuals, reduceMotion, layout, backdrop]);
+  }, [visuals, reduceMotion, layout, backdrop, beatIntensity]);
 
   const showLyrics = layout !== 'art';
   const particles = layout === 'lyrics' && backdrop === 'particles';

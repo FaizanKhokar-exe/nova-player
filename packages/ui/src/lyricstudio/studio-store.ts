@@ -1,7 +1,8 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { IpcResult, LyricsCandidateDto, LyricsSearchResultDto, NovaBridge, SaveLyricsResultDto } from '@nova/shared';
 import type { PlaybackStoreApi } from '../playback/playback-store.js';
-import { alignLines } from './align.js';
+import { alignLinesAsync } from './align.js';
+import { calibrateTimes, snapLines } from './calibrate.js';
 import { buildLrc, splitLyricsText, type PlainLine, type TimedLine } from './lrc-format.js';
 import { overview, snapToOnset, TAP_LAG_MS } from './snap.js';
 import { lineWeight } from './syllables.js';
@@ -30,6 +31,8 @@ export interface StudioState {
   readonly startFromSynced: boolean;
   /** The song already has lyrics: the studio opened on them, so they can be fixed or estimated again. */
   readonly hasExisting: boolean;
+  /** What was done to timing that came from elsewhere ("moved 2.8 s later"), or undefined. */
+  readonly calibrationNote: string | undefined;
   readonly lines: readonly PlainLine[];
   readonly times: readonly number[];
   readonly confidence: readonly number[];
@@ -102,6 +105,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
       search: { status: 'idle' as SearchStatus, candidates: [] as readonly LyricsCandidateDto[], chosenId: undefined as number | undefined },
       startFromSynced: false,
       hasExisting: false,
+      calibrationNote: undefined as string | undefined,
       lines: [] as readonly PlainLine[],
       times: [] as readonly number[],
       confidence: [] as readonly number[],
@@ -115,16 +119,25 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
       save: EMPTY_SAVE as StudioState['save'],
     };
     let syncedLines: TimedLine[] | undefined;
+    let syncedSourceMs: number | undefined;
 
-    function resolveFrom(fromIndex: number): void {
+    let resolveSequence = 0;
+    async function resolveFrom(fromIndex: number): Promise<void> {
       const s = get();
       if (features === undefined) return;
+      const mine = ++resolveSequence; // a newer stamp supersedes an older, still-running re-solve
       const anchors = new Map<number, number>();
       for (let i = 0; i < fromIndex && i < s.times.length; i += 1) anchors.set(i, s.times[i] ?? 0);
       for (const i of s.locks) anchors.set(i, s.times[i] ?? 0);
-      const result = alignLines(weights, features, { anchors, breakBefore: s.lines.map((l) => l.breakBefore) });
-      const confidence = result.confidence.map((c, i) => (s.locks.has(i) ? 1 : i < fromIndex ? (s.confidence[i] ?? c) : c));
-      set({ times: monotonic(result.startsMs, s.durationMs), confidence });
+      const token0 = token;
+      const result = await alignLinesAsync(weights, features, { anchors, breakBefore: s.lines.map((l) => l.breakBefore) }, () => mine !== resolveSequence || token0 !== token);
+      if (result === undefined) return;
+      const now = get();
+      // Lines the listener touched while this was running keep their newer value.
+      const keep = (i: number): boolean => now.locks.has(i) && !s.locks.has(i);
+      const times = monotonic(result.startsMs.map((t, i) => (keep(i) ? (now.times[i] ?? t) : t)), s.durationMs);
+      const confidence = result.confidence.map((c, i) => (now.locks.has(i) ? 1 : i < fromIndex ? (s.confidence[i] ?? c) : c));
+      set({ times, confidence });
     }
 
     return {
@@ -144,9 +157,11 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         const existing = existingLines().filter((l) => l.text.trim() !== '');
         if (existing.length > 0) syncedLines = existing.map((l) => ({ timeMs: l.timeMs, text: l.text }));
         const preload = existing.length > 0 ? { text: existing.map((l) => l.text).join('\n'), startFromSynced: true, hasExisting: true } : {};
+        playback.getState().setHoldTrack(true); // the song repeats while you time it; it never moves on to the next one
         set({ ...fresh, ...preload, open: true, trackId: current.track.id, title: current.track.title, artist: current.track.artist, queryTitle: current.track.title, queryArtist: current.track.artist, locks: new Set<number>() });
       },
       close() {
+        playback.getState().setHoldTrack(false);
         token += 1; // abandons any analysis in flight
         features = undefined;
         undoStack = [];
@@ -176,6 +191,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         const timed: TimedLine[] = candidate.syncedLines === undefined ? [] : candidate.syncedLines.map((l) => ({ timeMs: l.timeMs, text: l.text }));
         const useSynced = startFromSynced && timed.length > 0;
         syncedLines = useSynced ? timed : undefined;
+        syncedSourceMs = candidate.durationSec !== undefined ? candidate.durationSec * 1000 : undefined;
         const text = candidate.plain.trim() !== '' ? candidate.plain : timed.map((l) => l.text).join('\n');
         set({ text: useSynced ? timed.map((l) => l.text).join('\n') : text, startFromSynced: useSynced, search: { ...get().search, chosenId: candidate.id } });
       },
@@ -200,10 +216,24 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         features =
           analysed ??
           ({ frameMs: 20, durationMs: duration, level: new Float32Array(0), onset: new Float32Array(0), active: new Uint8Array(0), activeCum: new Float32Array(1), phrases: [] } satisfies VocalFeatures);
-        const result = alignLines(weights, features, { breakBefore: lines.map((l) => l.breakBefore) });
-        const times = useSynced && syncedLines !== undefined ? syncedLines.map((l) => l.timeMs) : [...result.startsMs];
+        const result = (await alignLinesAsync(weights, features, { breakBefore: lines.map((l) => l.breakBefore) }, () => mine !== token)) ?? { startsMs: [] as number[], confidence: [] as number[] };
+        if (mine !== token) return;
+        let times: number[] = useSynced && syncedLines !== undefined ? syncedLines.map((l) => l.timeMs) : [...result.startsMs];
+        let note: string | undefined;
+        if (useSynced && !failed && !s.hasExisting) {
+          // Timing found for ANOTHER recording: shift/stretch it onto this one, then settle each start on the nearest real onset.
+          const calibrated = calibrateTimes(times, features, syncedSourceMs);
+          if (calibrated.changed) {
+            const shift = calibrated.offsetMs / 1000;
+            note = `The found timing was moved ${Math.abs(shift).toFixed(1)} s ${shift < 0 ? 'earlier' : 'later'}${Math.abs(calibrated.scale - 1) > 0.004 ? ' and stretched' : ''} to fit your recording.`;
+          }
+          times = snapLines(calibrated.times, features, 250);
+        } else if (!useSynced && !failed) {
+          times = snapLines(times, features, 200);
+        }
         set({
           step: 'timing',
+          calibrationNote: note,
           times: monotonic(times, duration),
           confidence: useSynced ? times.map(() => 0.8) : result.confidence,
           durationMs: duration,
@@ -228,8 +258,8 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         times[s.selected] = snapped;
         const locks = new Set(s.locks).add(s.selected);
         set({ times: monotonic(times, s.durationMs), locks, selected: Math.min(s.lines.length - 1, s.selected + 1) });
-        resolveFrom(s.selected + 1); // the lines after it follow the new anchor
         set({ confidence: get().confidence.map((c, i) => (i === s.selected ? 1 : c)) });
+        void resolveFrom(s.selected + 1); // the lines after it follow the new anchor (in the background)
       },
 
       nudge(index, deltaMs) {
@@ -258,7 +288,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
 
       reestimate() {
         remember();
-        resolveFrom(0);
+        void resolveFrom(0);
       },
 
       shiftAll(deltaMs) {

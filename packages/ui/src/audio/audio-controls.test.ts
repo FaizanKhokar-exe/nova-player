@@ -86,3 +86,21 @@ describe('audio controls', () => {
     expect(formatRemaining(-5)).toBe('0:00');
   });
 });
+
+import { fadeLevel } from './audio-controls.js';
+describe('fadeLevel', () => {
+  const base = { sleepRemainingMs: undefined, sleepFade: true };
+  it('fades in at the start and out at the end of a long song, full in between, and never for short ones', () => {
+    expect(fadeLevel({ ...base, positionMs: 0, durationMs: 200_000, fadeSec: 4 })).toBe(0);
+    expect(fadeLevel({ ...base, positionMs: 2000, durationMs: 200_000, fadeSec: 4 })).toBeCloseTo(0.5, 1);
+    expect(fadeLevel({ ...base, positionMs: 100_000, durationMs: 200_000, fadeSec: 4 })).toBe(1);
+    expect(fadeLevel({ ...base, positionMs: 199_000, durationMs: 200_000, fadeSec: 4 })).toBeLessThan(0.2);
+    expect(fadeLevel({ ...base, positionMs: 0, durationMs: 10_000, fadeSec: 4 })).toBe(1);
+    expect(fadeLevel({ ...base, positionMs: 0, durationMs: 200_000, fadeSec: 0 })).toBe(1);
+  });
+  it('lowers the volume over the last 20 s of a sleep timer only when enabled', () => {
+    expect(fadeLevel({ positionMs: 50_000, durationMs: 200_000, fadeSec: 0, sleepRemainingMs: 10_000, sleepFade: true })).toBeCloseTo(0.5, 1);
+    expect(fadeLevel({ positionMs: 50_000, durationMs: 200_000, fadeSec: 0, sleepRemainingMs: 10_000, sleepFade: false })).toBe(1);
+    expect(fadeLevel({ positionMs: 50_000, durationMs: 200_000, fadeSec: 0, sleepRemainingMs: 60_000, sleepFade: true })).toBe(1);
+  });
+});

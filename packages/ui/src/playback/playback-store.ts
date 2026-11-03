@@ -158,6 +158,8 @@ export interface PlaybackActions {
   /** Replaces the queue with favourites / recently played / a playlist and plays it (optionally from one track, optionally shuffled). */
   playList(source: ListSourceDto, options?: { readonly startTrackId?: string; readonly shuffle?: boolean }): Promise<void>;
   /** Shows / hides the queue panel; the window is loaded while it is showing. */
+  /** While true the current song restarts when it ends instead of moving on (Lyric Studio: you are timing THIS song). */
+  setHoldTrack(hold: boolean): void;
   setQueueOpen(open: boolean): void;
   loadMoreQueue(): void;
   retryQueue(): void;
@@ -401,9 +403,15 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       });
     }
 
+    let holdTrack = false;
     async function trackEnded(): Promise<void> {
       const endedId = loadedTrackId;
       if (endedId === undefined) return;
+      if (holdTrack) {
+        audio.currentTime = 0;
+        void audio.play().catch(() => undefined);
+        return;
+      }
       savePositionAtEnd();
       setEngine({ playing: false, buffering: false });
       const sequence = ++commandSequence;
@@ -693,6 +701,10 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
         applySession(result.value.state, 'none');
         const what = label ?? 'Tracks';
         set({ notice: request.position === 'next' ? `${what} will play next.` : `${what} added to the queue.` });
+      },
+
+      setHoldTrack(hold) {
+        holdTrack = hold;
       },
 
       setQueueOpen(open) {

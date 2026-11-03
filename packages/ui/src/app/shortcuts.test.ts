@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveShortcut, SHORTCUT_HELP } from './shortcuts.js';
+import { CUSTOMIZABLE, conflictFor, isAssignableKey, resolveShortcut, SHORTCUT_HELP } from './shortcuts.js';
 
 const k = (key: string, extra: Partial<{ ctrl: boolean; shift: boolean; alt: boolean }> = {}) => resolveShortcut({ key, ctrl: false, shift: false, alt: false, ...extra });
 
@@ -26,6 +26,24 @@ describe('resolveShortcut', () => {
     expect(k('s', { ctrl: true })).toBeUndefined();
   });
   it('documents every action it handles', () => {
-    expect(SHORTCUT_HELP.length).toBeGreaterThanOrEqual(15);
+    expect(SHORTCUT_HELP.length).toBeGreaterThanOrEqual(9); // the fixed keys; the remappable ones are listed by CUSTOMIZABLE
+  });
+});
+
+describe('remappable keys', () => {
+  it('a new key replaces the old one; the old one stops working', () => {
+    const o = { togglePlay: 'k' };
+    expect(resolveShortcut({ key: 'k', ctrl: false, shift: false, alt: false }, o)).toEqual({ kind: 'togglePlay' });
+    expect(resolveShortcut({ key: ' ', ctrl: false, shift: false, alt: false }, o)).toBeUndefined();
+    expect(resolveShortcut({ key: 'K', ctrl: false, shift: false, alt: false }, o)).toEqual({ kind: 'togglePlay' });
+  });
+  it('every built-in key still resolves to its action, and conflicts / bad keys are caught', () => {
+    for (const e of CUSTOMIZABLE) expect(resolveShortcut({ key: e.key, ctrl: false, shift: false, alt: false })).toEqual({ kind: e.id });
+    expect(conflictFor('m', 'togglePlay', {})).toBe('mute');
+    expect(conflictFor('m', 'mute', {})).toBeUndefined();
+    expect(isAssignableKey('7')).toBe(false);
+    expect(isAssignableKey('?')).toBe(false);
+    expect(isAssignableKey('Enter')).toBe(false);
+    expect(isAssignableKey('x')).toBe(true);
   });
 });

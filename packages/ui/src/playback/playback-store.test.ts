@@ -571,6 +571,16 @@ describe('a track ending: main decides what happens next (Phase 1 domain rules, 
     expect(state().session?.current?.track.id).toBe(B.id);
   });
 
+  it('while a song is held (Lyric Studio) its end restarts the SAME song and main is not asked for a next one', async () => {
+    state().setHoldTrack(true);
+    fakes.audio.simEnded();
+    await flush();
+    expect(fakes.bridge.callsTo('playback:trackFinished')).toEqual([]);
+    expect(fakes.audio.srcHistory).toEqual([mediaUrlFor(A)]);
+    expect(fakes.audio.currentTime).toBe(0);
+    state().setHoldTrack(false);
+  });
+
   it('"started": the next track loads and plays from 0', async () => {
     fakes.bridge.on('playback:trackFinished', () => command('started', playbackState({ current: B, revision: 3 })));
     fakes.audio.simEnded();

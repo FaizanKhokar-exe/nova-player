@@ -194,20 +194,28 @@ function TimingStep() {
   const locks = useStudio((s) => s.locks);
   const selected = useStudio((s) => s.selected);
   const failed = useStudio((s) => s.analysisFailed);
+  const calibrationNote = useStudio((s) => s.calibrationNote);
   const canUndo = useStudio((s) => s.canUndo);
   const save = useStudio((s) => s.save);
   const playing = usePlaybackStore((s) => s.engine.playing);
-  const [now, setNow] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(-1);
   const list = useRef<HTMLUListElement | null>(null);
   const api = studio.getState();
 
-  // The line being sung right now (follows the exact playhead, ~15 times a second).
+  // The line being sung right now follows the exact playhead. Only a CHANGE of line re-renders (long lyrics stay light).
   useEffect(() => {
-    const timer = setInterval(() => setNow(playback.getState().livePositionMs()), 66);
+    const timer = setInterval(() => {
+      const now = playback.getState().livePositionMs();
+      const all = studio.getState().times;
+      let index = -1;
+      for (let i = 0; i < all.length; i += 1) {
+        if ((all[i] ?? 0) <= now) index = i;
+        else break;
+      }
+      setCurrentIndex((previous) => (previous === index ? previous : index));
+    }, 80);
     return () => clearInterval(timer);
-  }, [playback]);
-  let currentIndex = -1;
-  for (let i = 0; i < times.length; i += 1) if ((times[i] ?? 0) <= now) currentIndex = i;
+  }, [playback, studio]);
 
   useEffect(() => {
     const row = list.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`);
@@ -223,6 +231,7 @@ function TimingStep() {
   return (
     <div className="nx-studio-timing">
       {failed && <p className="nx-studio-warn" data-testid="studio-analysis-failed">The song’s audio couldn’t be analysed, so these times are only evenly spaced guesses. Play the song and stamp each line yourself.</p>}
+      {calibrationNote !== undefined && <p className="nx-studio-note" data-testid="studio-calibration">{calibrationNote}</p>}
       <Strip />
       <div className="nx-studio-bar">
         <button type="button" className="nx-btn" onClick={() => void playback.getState().togglePlay()} data-testid="studio-play" aria-label={playing ? 'Pause' : 'Play'}><Icon name={playing ? 'pause' : 'play'} size={15} /> {playing ? 'Pause' : 'Play'}</button>
@@ -289,7 +298,7 @@ export function LyricStudio() {
       if (ctrl && event.key.toLowerCase() === 'z') { handled(); s.undo(); return; }
       if (ctrl || event.altKey) return;
       switch (event.key) {
-        case ' ': if (el.tagName === 'BUTTON') return; handled(); void playback.getState().togglePlay(); return;
+        case ' ': handled(); void playback.getState().togglePlay(); return;
         case 'Enter': if (el.tagName === 'BUTTON') return; handled(); s.stamp(); return;
         case 'ArrowDown': handled(); s.select(s.selected + 1); return;
         case 'ArrowUp': handled(); s.select(s.selected - 1); return;
@@ -302,8 +311,15 @@ export function LyricStudio() {
         case 't': handled(); s.stamp(); return;
       }
     };
+    const onKeyUp = (event: KeyboardEvent): void => {
+      if (event.key === ' ' && studio.getState().step === 'timing' && !isTyping(event.target)) event.preventDefault();
+    };
     window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
+    window.addEventListener('keyup', onKeyUp, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+    };
   }, [open, studio, playback, requestClose, confirmClose]);
 
   if (!open) return null;

@@ -658,3 +658,45 @@ test('Lyric Studio: a song that already has lyrics can be re-opened to fix or re
   await expect(window.getByTestId('studio-begin')).toContainText('Estimate again');
   await app.close();
 });
+
+/* ---------------------------------- v0.13.0 ---------------------------------- */
+
+test('Space is a shortcut everywhere: with a button focused it still only plays/pauses, and a remapped key works', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  // focus a button by keyboard (Tab) - Space must NOT click it, only toggle playback
+  await window.getByTestId('nav-songs').focus();
+  const route = await window.getByTestId('main-scroll').count();
+  await window.keyboard.press('Space');
+  await expect(window.getByTestId('player-bar').getByRole('button', { name: /^Play$/ })).toBeVisible({ timeout: 5000 });
+  await window.keyboard.press('Space');
+  await expect(window.getByTestId('player-bar').getByRole('button', { name: /^Pause$/ })).toBeVisible({ timeout: 5000 });
+  expect(await window.getByTestId('main-scroll').count()).toBe(route);
+  // remap play/pause to K in Settings
+  await window.keyboard.press('Control+,');
+  await window.getByTestId('shortcut-togglePlay').click();
+  await window.keyboard.press('k');
+  await expect(window.getByTestId('shortcut-togglePlay')).toHaveText('K');
+  await window.getByTestId('nav-songs').click();
+  await window.keyboard.press('k');
+  await expect(window.getByTestId('player-bar').getByRole('button', { name: /^Play$/ })).toBeVisible({ timeout: 5000 });
+  await app.close();
+});
+
+test('Lyric style settings apply to the lyrics panel, and Lyric Studio keeps repeating the same song', async () => {
+  placeLyrics(box, 'Alpha', 'basic.lrc');
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.keyboard.press('Control+,');
+  await window.getByRole('button', { name: 'CAPS', exact: true }).click();
+  await window.getByRole('button', { name: 'Centre' }).click();
+  await window.getByRole('button', { name: 'Karaoke' }).click();
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  const panel = window.getByTestId('lyrics-panel');
+  await expect(panel).toHaveAttribute('data-case', 'upper');
+  await expect(panel).toHaveAttribute('data-align', 'center');
+  await expect(panel).toHaveAttribute('data-anim', 'karaoke');
+  await app.close();
+});

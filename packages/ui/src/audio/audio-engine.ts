@@ -18,6 +18,8 @@ export interface AudioEngine {
   connect(): boolean;
   /** Resumes a suspended context (call from a user gesture / when playback starts). */
   resume(): void;
+  /** 0..1 master fade (smart fade-in/out, sleep fade). Applied after the analyser, so the spectrum keeps moving. No-op without a graph. */
+  setFade(level: number): void;
   setEqEnabled(enabled: boolean): void;
   setGains(gains: readonly number[]): void;
   /** Copies the current frequency data into `into` (length = `binCount`). `false` when there is no graph. */
@@ -77,6 +79,7 @@ export function createAudioEngine(options: AudioEngineOptions): AudioEngine {
   let context: AudioContextLike | undefined;
   let filters: BiquadLike[] = [];
   let preamp: GainLike | undefined;
+  let fader: GainLike | undefined;
   let analyser: AnalyserLike | undefined;
   let source: AudioNodeLike | undefined;
   let failed = false;
@@ -124,8 +127,11 @@ export function createAudioEngine(options: AudioEngineOptions): AudioEngine {
           previous = band;
         }
         previous.connect(gain);
+        const fade = created.createGain();
         gain.connect(analysis);
-        analysis.connect(created.destination);
+        analysis.connect(fade);
+        fade.connect(created.destination);
+        fader = fade;
         context = created;
         source = node;
         filters = bands;
@@ -142,6 +148,9 @@ export function createAudioEngine(options: AudioEngineOptions): AudioEngine {
         }
         return false;
       }
+    },
+    setFade(level) {
+      if (fader !== undefined) fader.gain.value = Math.min(1, Math.max(0, level));
     },
     resume() {
       if (context === undefined || context.state !== 'suspended') return;
@@ -174,6 +183,7 @@ export function createAudioEngine(options: AudioEngineOptions): AudioEngine {
         source?.disconnect();
         for (const filter of filters) filter.disconnect();
         preamp?.disconnect();
+        fader?.disconnect();
         analyser?.disconnect();
         void context?.close().catch(() => undefined);
       } catch {

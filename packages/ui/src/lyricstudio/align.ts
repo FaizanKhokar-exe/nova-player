@@ -30,9 +30,31 @@ export interface AlignResult {
 
 export const LOW_CONFIDENCE = 0.45;
 const MIN_LINE_MS = 700;
-const MAX_LINE_MS = 30_000;
+const MAX_LINE_MS = 25_000;
 
+/** Runs the alignment to the end in one go. */
 export function alignLines(weights: readonly number[], f: VocalFeatures, options: AlignOptions = {}): AlignResult {
+  const run = alignSteps(weights, f, options);
+  for (;;) {
+    const step = run.next();
+    if (step.done === true) return step.value;
+  }
+}
+
+/** Same result, but gives the UI thread back between slices of work, so a long song with many lines never freezes the window. Returns `undefined` when cancelled. */
+export async function alignLinesAsync(weights: readonly number[], f: VocalFeatures, options: AlignOptions = {}, isCancelled: () => boolean = () => false): Promise<AlignResult | undefined> {
+  const run = alignSteps(weights, f, options);
+  for (;;) {
+    const step = run.next();
+    if (step.done === true) return step.value;
+    await new Promise<void>((resolve) => setTimeout(resolve, 0));
+    if (isCancelled()) return undefined;
+  }
+}
+
+const SLICE_MS = 12;
+
+function* alignSteps(weights: readonly number[], f: VocalFeatures, options: AlignOptions): Generator<void, AlignResult> {
   const n = weights.length;
   const starts: number[] = new Array<number>(n).fill(0);
   const conf: number[] = new Array<number>(n).fill(0);
@@ -60,7 +82,7 @@ export function alignLines(weights: readonly number[], f: VocalFeatures, options
     while (j + 1 < n && !anchors.has(j + 1)) j += 1;
     const lower = i > 0 ? (starts[i - 1] ?? 0) + MIN_LINE_MS : songStart;
     const upper = j < n - 1 ? (starts[j + 1] ?? duration) : songEnd;
-    solveRun(i, j, lower, Math.max(upper, lower + 1));
+    yield* solveRun(i, j, lower, Math.max(upper, lower + 1));
     i = j + 1;
   }
   // With no sung phrase found there is nothing to be confident about.
@@ -95,7 +117,7 @@ export function alignLines(weights: readonly number[], f: VocalFeatures, options
     }
   }
 
-  function solveRun(a: number, b: number, lower: number, upper: number): void {
+  function* solveRun(a: number, b: number, lower: number, upper: number): Generator<void, void> {
     const count = b - a + 1;
     const loFrame = frameOf(lower);
     const hiFrame = frameOf(upper);
@@ -135,13 +157,15 @@ export function alignLines(weights: readonly number[], f: VocalFeatures, options
       if (dur > 18_000) cost += (dur - 18_000) / 6000;
       return cost;
     };
-    const startCost = (line: number, ci: number): number => {
+    // Per candidate, computed once (not once per pair of candidates).
+    const baseStart = new Float64Array(cands.length);
+    const afterPause = new Uint8Array(cands.length);
+    for (let ci = 0; ci < cands.length; ci += 1) {
       const fr = cands[ci] ?? 0;
-      let cost = -0.6 * (strength[ci] ?? 0);
-      if (!activeSoon(fr)) cost += 0.6;
-      if (silentBefore(fr)) cost -= options.breakBefore?.[line] === true ? 0.45 : 0.25;
-      return cost;
-    };
+      baseStart[ci] = -0.6 * (strength[ci] ?? 0) + (activeSoon(fr) ? 0 : 0.6);
+      afterPause[ci] = silentBefore(fr) ? 1 : 0;
+    }
+    const startCost = (line: number, ci: number): number => (baseStart[ci] ?? 0) - (afterPause[ci] === 1 ? (options.breakBefore?.[line] === true ? 0.45 : 0.25) : 0);
 
     const m = cands.length;
     const time = (ci: number): number => (cands[ci] ?? 0) * f.frameMs;
@@ -151,7 +175,12 @@ export function alignLines(weights: readonly number[], f: VocalFeatures, options
     for (let line = a; line < b; line += 1) {
       const next = new Float64Array(m).fill(Number.POSITIVE_INFINITY);
       const pointer = new Int32Array(m).fill(-1);
+      let sliceStart = Date.now();
       for (let p = 0; p < m; p += 1) {
+        if ((p & 63) === 63 && Date.now() - sliceStart > SLICE_MS) {
+          yield;
+          sliceStart = Date.now();
+        }
         const base = prev[p] ?? Number.POSITIVE_INFINITY;
         if (!Number.isFinite(base)) continue;
         const ts = time(p);

@@ -25,6 +25,7 @@ function harness(options: { signal?: boolean; live?: number } = {}) {
   const s = song();
   const calls: [string, unknown][] = [];
   let live = options.live ?? 0;
+  const holds: boolean[] = [];
   const playback = {
     getState: () => ({
       session: { current: { track: { id: TRACK, title: 'Moon', artist: 'Someone' } } },
@@ -33,6 +34,7 @@ function harness(options: { signal?: boolean; live?: number } = {}) {
       livePositionMs: () => live,
       seekMs: vi.fn(),
       togglePlay: vi.fn(),
+      setHoldTrack: (v: boolean) => holds.push(v),
     }),
   } as unknown as PlaybackStoreApi;
   const bridge = {
@@ -44,7 +46,7 @@ function harness(options: { signal?: boolean; live?: number } = {}) {
   } as unknown as NovaBridge;
   const saved = vi.fn();
   const store = createStudioStore(bridge, playback, saved);
-  return { store, calls, saved, truth: s.truth, setLive: (v: number) => void (live = v) };
+  return { store, calls, saved, holds, truth: s.truth, setLive: (v: number) => void (live = v) };
 }
 
 describe('Lyric Studio store', () => {
@@ -102,7 +104,8 @@ describe('Lyric Studio store', () => {
     await h.store.getState().runSearch();
     h.store.getState().pickCandidate(h.store.getState().search.candidates[0]!, true);
     await h.store.getState().begin();
-    expect(h.store.getState().times).toEqual([2000, 5000, 8000, 12000]);
+    // the found timing is settled onto this recording's real onsets (within 0.25 s)
+    [2000, 5000, 8000, 12000].forEach((t, i) => expect(Math.abs((h.store.getState().times[i] ?? 0) - t)).toBeLessThanOrEqual(250));
     expect(h.store.getState().confidence.every((c) => c === 0.8)).toBe(true);
   });
 
@@ -129,7 +132,9 @@ describe('Lyric Studio store', () => {
     expect(lrc).toMatch(/^\[ti:Moon\]\n\[ar:Someone\]\n\[by:Nova Player Lyric Studio\]\n\[00:0\d\.\d\d\]hello darling come to me\n/);
     expect(h.store.getState().save).toMatchObject({ status: 'saved', outcome: 'saved-beside' });
     expect(h.saved).toHaveBeenCalledTimes(1);
+    expect(h.holds).toEqual([true]);
     h.store.getState().close();
+    expect(h.holds).toEqual([true, false]);
     expect(h.store.getState()).toMatchObject({ open: false, step: 'source', text: '', times: [] });
   });
 
@@ -145,7 +150,7 @@ describe('reopening on a song that already has lyrics', () => {
   it('preloads them, can fix their timing, or estimate again from the audio', async () => {
     const h = harness();
     const existing = [{ timeMs: 1000, text: 'hello darling come to me' }, { timeMs: 4000, text: 'I have been waiting' }, { timeMs: 6000, text: '' }, { timeMs: 9000, text: 'hold me' }];
-    const store = createStudioStore({ invoke: async () => ({ ok: true, value: {} }) } as unknown as NovaBridge, { getState: () => ({ session: { current: { track: { id: TRACK, title: 'Moon', artist: 'S' } } }, engine: { durationMs: 20000, playing: false }, monoSignal: async () => undefined, livePositionMs: () => 0, seekMs: vi.fn(), togglePlay: vi.fn() }) } as unknown as PlaybackStoreApi, () => undefined, () => existing);
+    const store = createStudioStore({ invoke: async () => ({ ok: true, value: {} }) } as unknown as NovaBridge, { getState: () => ({ session: { current: { track: { id: TRACK, title: 'Moon', artist: 'S' } } }, engine: { durationMs: 20000, playing: false }, monoSignal: async () => undefined, livePositionMs: () => 0, seekMs: vi.fn(), togglePlay: vi.fn(), setHoldTrack: () => undefined }) } as unknown as PlaybackStoreApi, () => undefined, () => existing);
     store.getState().openStudio();
     expect(store.getState()).toMatchObject({ hasExisting: true, startFromSynced: true });
     expect(store.getState().text.split('\n')).toEqual(['hello darling come to me', 'I have been waiting', 'hold me']);

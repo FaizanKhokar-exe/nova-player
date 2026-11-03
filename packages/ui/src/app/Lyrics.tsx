@@ -16,7 +16,14 @@ export function singDurationMs(text: string, gapMs: number): number {
   return Math.max(400, Math.min(estimate, gapMs * 0.94));
 }
 
-const Line = memo(function Line({ line, index, distance, active, depthBlur, singMs, onSeek }: { line: LyricLineDto; index: number; distance: number; active: boolean; depthBlur: boolean; singMs: number; onSeek: (line: LyricLineDto) => void }) {
+/** Springy ease with a small overshoot: the line is "pulled" into place and settles. */
+export const easeOutBack = (x: number): number => {
+  const c1 = 1.1;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
+};
+
+const Line = memo(function Line({ line, index, distance, active, depthBlur, singMs, magnet, onSeek }: { line: LyricLineDto; index: number; distance: number; active: boolean; depthBlur: boolean; singMs: number; magnet: boolean; onSeek: (line: LyricLineDto) => void }) {
   const step = Math.min(Math.abs(distance), OPACITY.length - 1);
   return (
     <button
@@ -35,6 +42,8 @@ const Line = memo(function Line({ line, index, distance, active, depthBlur, sing
         ['--lyric-opacity' as string]: active ? 1 : OPACITY[step],
         ['--lyric-blur' as string]: `${active || !depthBlur ? 0 : BLUR[step]}px`,
         ['--lyric-scale' as string]: active ? 1 : 0.96,
+        // Magnet: lines already sung are drawn up and away; the next ones wait just below, ready to be pulled in.
+        ['--lyric-ty' as string]: magnet && !active ? `${distance < 0 ? -Math.min(Math.abs(distance), 3) * 5 : Math.min(distance, 3) * 4}px` : '0px',
       }}
     >
       {line.text === '' ? <span aria-label="Instrumental break">♪ ♪ ♪</span> : <span className={active ? 'nx-lyric-fill nx-text' : 'nx-text'} dir="auto">{line.text}</span>}
@@ -57,11 +66,23 @@ export function Lyrics() {
   const playing = usePlaybackStore((s) => s.engine.playing);
   const seekMs = usePlaybackStore((s) => s.seekMs);
   const depthBlur = usePrefs((s) => s.lyricsDepthBlur);
+  const animation = usePrefs((s) => s.lyricsAnimation);
+  const align = usePrefs((s) => s.lyricsAlign);
+  const textCase = usePrefs((s) => s.lyricsCase);
+  const font = usePrefs((s) => s.lyricsFont);
+  const glow = usePrefs((s) => s.lyricsGlow);
+  const beat = usePrefs((s) => s.beatIntensity);
+  const { visuals } = useServices();
+  const tween = useRef<number>(0);
   const speed = usePrefs((s) => s.speed);
   const lines = lyrics.lines;
   const activeIndex = usePlaybackPositionSelector((positionMs) => activeLyricIndex(lines, positionMs) ?? -1);
 
   const scroller = useRef<HTMLDivElement | null>(null);
+  const animationRef = useRef(animation);
+  useEffect(() => {
+    animationRef.current = animation;
+  }, [animation]);
   const [detachedFor, setDetachedFor] = useState<string | undefined>(undefined);
   const detachTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const detached = detachedFor !== undefined && detachedFor === trackId;
@@ -71,7 +92,22 @@ export function Lyrics() {
     if (container === null || index < 0) return;
     const row = container.querySelector<HTMLElement>(`[data-index="${index}"]`);
     if (row === null || typeof container.scrollTo !== 'function') return;
-    container.scrollTo({ top: row.offsetTop - container.clientHeight * 0.38 + row.offsetHeight / 2, behavior });
+    const top = row.offsetTop - container.clientHeight * 0.38 + row.offsetHeight / 2;
+    cancelAnimationFrame(tween.current);
+    if (behavior === 'smooth' && animationRef.current === 'magnet' && document.documentElement.dataset['reduceMotion'] !== 'true') {
+      // Magnet: the next line is drawn up to the reading spot with a springy settle (a little overshoot, then rest).
+      const from = container.scrollTop;
+      const started = performance.now();
+      const duration = 640;
+      const step = (nowMs: number): void => {
+        const t = Math.min(1, (nowMs - started) / duration);
+        container.scrollTop = from + (top - from) * easeOutBack(t);
+        if (t < 1) tween.current = requestAnimationFrame(step);
+      };
+      tween.current = requestAnimationFrame(step);
+      return;
+    }
+    container.scrollTo({ top, behavior });
   }, []);
 
   useEffect(() => {
@@ -86,6 +122,9 @@ export function Lyrics() {
     const element = scroller.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"] .nx-lyric-fill`);
     if (line === undefined || element === null || element === undefined) return;
     const sing = singDurationMs(line.text, (next?.timeMs ?? line.timeMs + 6_000) - line.timeMs);
+    const strength = { off: 0, subtle: 0.5, normal: 1, strong: 1.6 }[beat];
+    const lineElement = element.closest<HTMLElement>('.nx-lyric');
+    const offBeat = strength > 0 && lineElement !== null ? visuals.subscribe((frame) => lineElement.style.setProperty('--beat', Math.min(1, frame.levels.pulse * strength).toFixed(3))) : () => undefined;
     const positions = playback.getState().positionStore;
     let base = { positionMs: positions.getState().positionMs, at: performance.now() };
     const stop = positions.subscribe((s) => (base = { positionMs: s.positionMs, at: performance.now() }));
@@ -99,8 +138,10 @@ export function Lyrics() {
     return () => {
       cancelAnimationFrame(frame);
       stop();
+      offBeat();
+      lineElement?.style.setProperty('--beat', '0');
     };
-  }, [activeIndex, lines, playback, speed, playing]);
+  }, [activeIndex, lines, playback, speed, playing, beat, visuals]);
 
   const detach = useCallback(() => {
     setDetachedFor(trackId);
@@ -138,7 +179,7 @@ export function Lyrics() {
     body = (
       <div key={trackId} ref={scroller} className="nx-lyrics" role="list" aria-label="Lyrics" data-testid="lyrics-list" onWheel={detach} onTouchMove={detach}>
         {lines.map((line, index) => (
-          <Line key={`${index}-${line.timeMs}`} line={line} index={index} distance={activeIndex < 0 ? index + 1 : index - activeIndex} active={index === activeIndex} depthBlur={depthBlur} singMs={singDurationMs(line.text, (lines[index + 1]?.timeMs ?? line.timeMs + 6_000) - line.timeMs)} onSeek={onSeek} />
+          <Line key={`${index}-${line.timeMs}`} line={line} index={index} distance={activeIndex < 0 ? index + 1 : index - activeIndex} active={index === activeIndex} depthBlur={depthBlur} magnet={animation === 'magnet'} singMs={singDurationMs(line.text, (lines[index + 1]?.timeMs ?? line.timeMs + 6_000) - line.timeMs)} onSeek={onSeek} />
         ))}
       </div>
     );
@@ -146,7 +187,7 @@ export function Lyrics() {
 
   const found = lyrics.status === 'ready' && lyrics.availability === 'found';
   return (
-    <section className="nx-np-right" aria-label="Lyrics" data-testid="lyrics-panel" data-playing={playing ? 'true' : 'false'} data-status={lyrics.status === 'ready' ? (lyrics.availability ?? 'ready') : lyrics.status}>
+    <section className="nx-np-right" aria-label="Lyrics" data-testid="lyrics-panel" data-anim={animation} data-align={align} data-case={textCase} data-font={font} data-glow={glow ? 'on' : 'off'} data-playing={playing ? 'true' : 'false'} data-status={lyrics.status === 'ready' ? (lyrics.availability ?? 'ready') : lyrics.status}>
       {body}
       {detached && found && (
         <button type="button" className="nx-btn nx-lyrics-jump" style={{ background: 'rgba(255,255,255,.2)', color: '#fff', borderColor: 'transparent', backdropFilter: 'blur(10px)' }} data-testid="lyrics-jump" onClick={() => { setDetachedFor(undefined); centre(activeIndex, 'smooth'); }}>

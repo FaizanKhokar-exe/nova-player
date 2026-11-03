@@ -11,6 +11,15 @@ import { EQ_BANDS, EQ_PRESETS, clampDb } from '../audio/eq-presets.js';
 export type VisualizerStyle = 'bars' | 'wave' | 'ring';
 export type PerformanceMode = 'auto' | 'high' | 'balanced' | 'low';
 export type LyricsBackdrop = 'particles' | 'aurora' | 'plain';
+/** How the next line arrives: Magnet pulls it up from below with a springy settle; Apple glides the whole list; Karaoke lifts the line and wipes colour across it. */
+export type LyricsAnimation = 'magnet' | 'apple' | 'karaoke';
+export type LyricsAlign = 'left' | 'center';
+export type LyricsCase = 'normal' | 'upper' | 'lower' | 'small-caps' | 'capitalize';
+export type LyricsFont = 'default' | 'serif' | 'rounded' | 'mono';
+export type BeatIntensity = 'off' | 'subtle' | 'normal' | 'strong';
+export const TRACK_FADE_SECONDS = [0, 2, 4, 6] as const;
+/** Action id -> key name (as in KeyboardEvent.key) the listener assigned to it; absent = the built-in key. */
+export type ShortcutOverrides = Readonly<Record<string, string>>;
 
 export const SPEEDS = [0.5, 0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2] as const;
 export const WALLPAPER_DIM_RANGE = { min: 0, max: 90 } as const;
@@ -35,6 +44,19 @@ export interface Prefs {
   readonly lyricsDepthBlur: boolean;
   /** The listener agreed to let Lyric Studio send a song's title/artist to lrclib.net when they press Search. */
   readonly lyricsSearchConsent: boolean;
+  readonly lyricsAnimation: LyricsAnimation;
+  readonly lyricsAlign: LyricsAlign;
+  readonly lyricsCase: LyricsCase;
+  readonly lyricsFont: LyricsFont;
+  /** A soft glow around the line being sung. */
+  readonly lyricsGlow: boolean;
+  /** How strongly the beat moves the visuals (cover pulse, glow, particles, lyric glow). */
+  readonly beatIntensity: BeatIntensity;
+  /** Seconds of fade-out at the end of each song and fade-in at the start of the next (0 = off). */
+  readonly trackFadeSec: number;
+  /** The sleep timer lowers the volume over its last 20 seconds instead of stopping abruptly. */
+  readonly sleepFade: boolean;
+  readonly shortcutOverrides: ShortcutOverrides;
 }
 
 export interface PrefsActions {
@@ -52,6 +74,16 @@ export interface PrefsActions {
   setLyricsBackdrop(value: LyricsBackdrop): void;
   setLyricsDepthBlur(value: boolean): void;
   setLyricsSearchConsent(value: boolean): void;
+  setLyricsAnimation(value: LyricsAnimation): void;
+  setLyricsAlign(value: LyricsAlign): void;
+  setLyricsCase(value: LyricsCase): void;
+  setLyricsFont(value: LyricsFont): void;
+  setLyricsGlow(value: boolean): void;
+  setBeatIntensity(value: BeatIntensity): void;
+  setTrackFadeSec(value: number): void;
+  setSleepFade(value: boolean): void;
+  /** `key` undefined removes the override. */
+  setShortcut(action: string, key: string | undefined): void;
   resetAll(): void;
 }
 
@@ -72,6 +104,15 @@ export const DEFAULT_PREFS: Prefs = {
   lyricsBackdrop: 'particles',
   lyricsDepthBlur: true,
   lyricsSearchConsent: false,
+  lyricsAnimation: 'magnet',
+  lyricsAlign: 'left',
+  lyricsCase: 'normal',
+  lyricsFont: 'default',
+  lyricsGlow: true,
+  beatIntensity: 'normal',
+  trackFadeSec: 0,
+  sleepFade: true,
+  shortcutOverrides: {},
 };
 
 const KEY = 'nova.prefs.v1';
@@ -94,6 +135,15 @@ export function snapSpeed(value: number): number {
   return SPEEDS.reduce((best, candidate) => (Math.abs(candidate - value) < Math.abs(best - value) ? candidate : best), 1 as number);
 }
 
+function sanitizeOverrides(raw: unknown): ShortcutOverrides {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return {};
+  const out: Record<string, string> = {};
+  for (const [action, key] of Object.entries(raw as Record<string, unknown>)) {
+    if (/^[a-zA-Z]{2,24}$/.test(action) && typeof key === 'string' && key.length >= 1 && key.length <= 12) out[action] = key;
+  }
+  return out;
+}
+
 function sanitize(raw: unknown): Prefs {
   const p = (typeof raw === 'object' && raw !== null ? raw : {}) as Record<string, unknown>;
   const gains = Array.isArray(p.eqGains) && p.eqGains.length === EQ_BANDS.length && p.eqGains.every((g) => typeof g === 'number') ? (p.eqGains as number[]).map(clampDb) : DEFAULT_PREFS.eqGains;
@@ -112,6 +162,15 @@ function sanitize(raw: unknown): Prefs {
     lyricsBackdrop: oneOf(p.lyricsBackdrop, ['particles', 'aurora', 'plain'], DEFAULT_PREFS.lyricsBackdrop),
     lyricsDepthBlur: typeof p.lyricsDepthBlur === 'boolean' ? p.lyricsDepthBlur : DEFAULT_PREFS.lyricsDepthBlur,
     lyricsSearchConsent: p.lyricsSearchConsent === true,
+    lyricsAnimation: oneOf(p.lyricsAnimation, ['magnet', 'apple', 'karaoke'], DEFAULT_PREFS.lyricsAnimation),
+    lyricsAlign: oneOf(p.lyricsAlign, ['left', 'center'], DEFAULT_PREFS.lyricsAlign),
+    lyricsCase: oneOf(p.lyricsCase, ['normal', 'upper', 'lower', 'small-caps', 'capitalize'], DEFAULT_PREFS.lyricsCase),
+    lyricsFont: oneOf(p.lyricsFont, ['default', 'serif', 'rounded', 'mono'], DEFAULT_PREFS.lyricsFont),
+    lyricsGlow: typeof p.lyricsGlow === 'boolean' ? p.lyricsGlow : DEFAULT_PREFS.lyricsGlow,
+    beatIntensity: oneOf(p.beatIntensity, ['off', 'subtle', 'normal', 'strong'], DEFAULT_PREFS.beatIntensity),
+    trackFadeSec: typeof p.trackFadeSec === 'number' && (TRACK_FADE_SECONDS as readonly number[]).includes(p.trackFadeSec) ? p.trackFadeSec : 0,
+    sleepFade: typeof p.sleepFade === 'boolean' ? p.sleepFade : DEFAULT_PREFS.sleepFade,
+    shortcutOverrides: sanitizeOverrides(p.shortcutOverrides),
   };
 }
 
@@ -146,6 +205,20 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
     setLyricsBackdrop: (lyricsBackdrop) => set({ lyricsBackdrop }),
     setLyricsDepthBlur: (lyricsDepthBlur) => set({ lyricsDepthBlur }),
     setLyricsSearchConsent: (lyricsSearchConsent) => set({ lyricsSearchConsent }),
+    setLyricsAnimation: (lyricsAnimation) => set({ lyricsAnimation }),
+    setLyricsAlign: (lyricsAlign) => set({ lyricsAlign }),
+    setLyricsCase: (lyricsCase) => set({ lyricsCase }),
+    setLyricsFont: (lyricsFont) => set({ lyricsFont }),
+    setLyricsGlow: (lyricsGlow) => set({ lyricsGlow }),
+    setBeatIntensity: (beatIntensity) => set({ beatIntensity }),
+    setTrackFadeSec: (value) => set({ trackFadeSec: (TRACK_FADE_SECONDS as readonly number[]).includes(value) ? value : 0 }),
+    setSleepFade: (sleepFade) => set({ sleepFade }),
+    setShortcut: (action, key) => {
+      const next = { ...get().shortcutOverrides };
+      if (key === undefined) delete next[action];
+      else next[action] = key;
+      set({ shortcutOverrides: sanitizeOverrides(next) });
+    },
     resetAll: () => set({ ...DEFAULT_PREFS }),
   }));
   store.subscribe((s) => {
@@ -164,6 +237,15 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
         lyricsBackdrop: s.lyricsBackdrop,
         lyricsDepthBlur: s.lyricsDepthBlur,
         lyricsSearchConsent: s.lyricsSearchConsent,
+        lyricsAnimation: s.lyricsAnimation,
+        lyricsAlign: s.lyricsAlign,
+        lyricsCase: s.lyricsCase,
+        lyricsFont: s.lyricsFont,
+        lyricsGlow: s.lyricsGlow,
+        beatIntensity: s.beatIntensity,
+        trackFadeSec: s.trackFadeSec,
+        sleepFade: s.sleepFade,
+        shortcutOverrides: s.shortcutOverrides,
       };
       storage?.setItem(KEY, JSON.stringify(value));
     } catch {

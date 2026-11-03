@@ -113,7 +113,7 @@ function fakeContext(): { context: AudioContextLike; filters: BiquadLike[]; gain
 }
 
 describe('audio engine', () => {
-  it('builds source -> 10 filters -> gain -> analyser -> destination once', () => {
+  it('builds source -> 10 filters -> gain -> analyser -> fade -> destination once', () => {
     const fake = fakeContext();
     const engine = createAudioEngine({ element: {}, createContext: () => fake.context });
     expect(engine.connected).toBe(false);
@@ -122,7 +122,7 @@ describe('audio engine', () => {
     expect(fake.filters).toHaveLength(10);
     expect(fake.filters[0]!.type).toBe('lowshelf');
     expect(fake.filters[9]!.type).toBe('highshelf');
-    expect(fake.connections).toHaveLength(10 + 1 + 1 + 1); // source->f0 ... f9->gain, gain->analyser, analyser->destination
+    expect(fake.connections).toHaveLength(10 + 1 + 1 + 1 + 1); // source->f0 ... f9->gain, gain->analyser, analyser->fade, fade->destination
     expect(fake.connections.at(-1)![1]).toBe(fake.context.destination);
     expect(engine.binHz).toBeCloseTo(44_100 / 1024);
   });
