@@ -78,8 +78,8 @@ export function stepParticles(s: ParticleSystem, input: ParticleInput, random: (
   const speed = 0.55 + input.level * 2.4;
   const cx = input.width / 2;
   const cy = input.height / 2;
-  // Particles are nudged back from the sides: a soft wall over the outer 14% of the width, so the field stays on screen.
-  const wall = Math.max(24, input.width * 0.14);
+  // The field covers the WHOLE width: a particle drifting out of one side re-enters on the other (no inward wall, which used to leave the edges empty).
+  const edge = 14;
   for (let i = 0; i < s.count; i += 1) {
     const depth = s.depth[i] as number;
     if (input.beat) {
@@ -97,10 +97,7 @@ export function stepParticles(s: ParticleSystem, input: ParticleInput, random: (
     const driftY = -(6 + depth * 14) * speed;
     let vx = (s.vx[i] as number) * drag;
     let vy = driftY + ((s.vy[i] as number) - driftY) * drag;
-    // Soft side walls.
     const x = s.x[i] as number;
-    if (x < wall) vx += ((wall - x) / wall) * 90 * dt;
-    else if (x > input.width - wall) vx -= ((x - (input.width - wall)) / wall) * 90 * dt;
     // Speed cap.
     const v = Math.hypot(vx, vy);
     if (v > MAX_PARTICLE_SPEED) {
@@ -109,7 +106,10 @@ export function stepParticles(s: ParticleSystem, input: ParticleInput, random: (
     }
     s.vx[i] = vx;
     s.vy[i] = vy;
-    s.x[i] = Math.min(input.width + 8, Math.max(-8, x + vx * dt * speed)); // never leaves through the sides
+    let nextX = x + vx * dt * speed;
+    if (nextX < -edge) nextX += input.width + edge * 2;
+    else if (nextX > input.width + edge) nextX -= input.width + edge * 2;
+    s.x[i] = Math.min(input.width + edge, Math.max(-edge, nextX));
     s.y[i] = (s.y[i] as number) + vy * dt * speed;
     s.glow[i] = Math.max(0, (s.glow[i] as number) - dt * 2.2);
     const margin = 60;

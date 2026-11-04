@@ -70,9 +70,6 @@ export function Lyrics() {
   const align = usePrefs((s) => s.lyricsAlign);
   const textCase = usePrefs((s) => s.lyricsCase);
   const font = usePrefs((s) => s.lyricsFont);
-  const glow = usePrefs((s) => s.lyricsGlow);
-  const beat = usePrefs((s) => s.beatIntensity);
-  const { visuals } = useServices();
   const tween = useRef<number>(0);
   const speed = usePrefs((s) => s.speed);
   const lines = lyrics.lines;
@@ -122,9 +119,6 @@ export function Lyrics() {
     const element = scroller.current?.querySelector<HTMLElement>(`[data-index="${activeIndex}"] .nx-lyric-fill`);
     if (line === undefined || element === null || element === undefined) return;
     const sing = singDurationMs(line.text, (next?.timeMs ?? line.timeMs + 6_000) - line.timeMs);
-    const strength = { off: 0, subtle: 0.5, normal: 1, strong: 1.6 }[beat];
-    const lineElement = element.closest<HTMLElement>('.nx-lyric');
-    const offBeat = strength > 0 && lineElement !== null ? visuals.subscribe((frame) => lineElement.style.setProperty('--beat', Math.min(1, frame.levels.pulse * strength).toFixed(3))) : () => undefined;
     const positions = playback.getState().positionStore;
     let base = { positionMs: positions.getState().positionMs, at: performance.now() };
     const stop = positions.subscribe((s) => (base = { positionMs: s.positionMs, at: performance.now() }));
@@ -138,10 +132,8 @@ export function Lyrics() {
     return () => {
       cancelAnimationFrame(frame);
       stop();
-      offBeat();
-      lineElement?.style.setProperty('--beat', '0');
     };
-  }, [activeIndex, lines, playback, speed, playing, beat, visuals]);
+  }, [activeIndex, lines, playback, speed, playing]);
 
   const detach = useCallback(() => {
     setDetachedFor(trackId);
@@ -187,7 +179,7 @@ export function Lyrics() {
 
   const found = lyrics.status === 'ready' && lyrics.availability === 'found';
   return (
-    <section className="nx-np-right" aria-label="Lyrics" data-testid="lyrics-panel" data-anim={animation} data-align={align} data-case={textCase} data-font={font} data-glow={glow ? 'on' : 'off'} data-playing={playing ? 'true' : 'false'} data-status={lyrics.status === 'ready' ? (lyrics.availability ?? 'ready') : lyrics.status}>
+    <section className="nx-np-right" aria-label="Lyrics" data-testid="lyrics-panel" data-anim={animation} data-align={align} data-case={textCase} data-font={font} data-playing={playing ? 'true' : 'false'} data-status={lyrics.status === 'ready' ? (lyrics.availability ?? 'ready') : lyrics.status}>
       {body}
       {detached && found && (
         <button type="button" className="nx-btn nx-lyrics-jump" style={{ background: 'rgba(255,255,255,.2)', color: '#fff', borderColor: 'transparent', backdropFilter: 'blur(10px)' }} data-testid="lyrics-jump" onClick={() => { setDetachedFor(undefined); centre(activeIndex, 'smooth'); }}>

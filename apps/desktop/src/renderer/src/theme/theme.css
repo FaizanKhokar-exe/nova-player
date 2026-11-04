@@ -118,6 +118,9 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 button, input, select, textarea { font-family: inherit; color: inherit; }
 button { cursor: pointer; }
 :focus-visible { outline: 2px solid var(--accent-primary); outline-offset: 2px; }
+/* The focus ring is for keyboard navigation only: once the mouse is used (or shortcuts are pressed) no icon shows a ring. AppRoot sets data-kb while Tab is being used. */
+:root:not([data-kb='true']) :focus-visible { outline: none; }
+:root:not([data-kb='true']) button:focus, :root:not([data-kb='true']) [role='button']:focus { outline: none; box-shadow: none; }
 ::selection { background: rgba(var(--accent-primary-rgb), 0.4); }
 /* Text in any script: let the browser pick the direction per string, and never clip descenders of tall scripts. */
 .nx-text { unicode-bidi: plaintext; }
@@ -624,6 +627,4 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 [data-testid='lyrics-panel'][data-font='serif'] .nx-lyric { font-family: Georgia, 'Noto Serif', 'Times New Roman', serif; font-weight: 700; }
 [data-testid='lyrics-panel'][data-font='rounded'] .nx-lyric { font-family: 'Nunito', 'Varela Round', 'Segoe UI', system-ui, sans-serif; }
 [data-testid='lyrics-panel'][data-font='mono'] .nx-lyric { font-family: var(--font-mono); font-weight: 700; letter-spacing: -0.6px; }
-[data-testid='lyrics-panel'][data-glow='off'] .nx-lyric[data-state='current'] .nx-lyric-fill { filter: none; }
-[data-testid='lyrics-panel'][data-glow='on'] .nx-lyric[data-state='current'] .nx-lyric-fill { filter: drop-shadow(0 0 calc(14px + 22px * var(--beat, 0)) rgba(255,255,255, calc(0.3 + 0.35 * var(--beat, 0)))); }
 .nx-kbd-btn { cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); } .nx-kbd-btn[data-editing='true'] { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), .35); }

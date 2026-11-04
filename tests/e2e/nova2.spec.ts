@@ -700,3 +700,17 @@ test('Lyric style settings apply to the lyrics panel, and Lyric Studio keeps rep
   await expect(panel).toHaveAttribute('data-anim', 'karaoke');
   await app.close();
 });
+
+test('no icon shows a focus ring after mouse clicks and shortcut keys; Tab brings the ring back', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByTestId('player-bar').getByRole('button', { name: /^Pause$/ }).click();
+  await window.keyboard.press('m');
+  await window.keyboard.press('ArrowRight');
+  const ring = () => window.evaluate(() => { const el = document.querySelector(':focus-visible') as HTMLElement | null; return el === null ? 'none-focused' : getComputedStyle(el).outlineStyle; });
+  expect(['none', 'none-focused']).toContain(await ring());
+  await window.keyboard.press('Tab');
+  expect(await ring()).toBe('solid');
+  await app.close();
+});

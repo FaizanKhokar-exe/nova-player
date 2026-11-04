@@ -7,7 +7,7 @@ left off).
 
 Everything stays on your machine. See [Privacy and data](#privacy-and-data).
 
-> **Release status (read this first).** Version 0.13.0 (the "Nova Player 2" redesign) is a **release candidate**. It has been
+> **Release status (read this first).** Version 0.13.1 (the "Nova Player 2" redesign) is a **release candidate**. It has been
 > built into a Windows installer and exercised in a Linux test environment (see
 > [Release status in detail](#release-status-in-detail)), but it has **not yet been installed and run
 > on a real Windows machine**, and the installer is **unsigned**. Expect a Windows security warning

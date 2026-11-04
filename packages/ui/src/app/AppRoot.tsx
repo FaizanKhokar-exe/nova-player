@@ -148,10 +148,17 @@ function AppEffects() {
       if (button === null || button === undefined || button.hasAttribute('data-keep-focus') || (button.closest('[role="menu"], [role="dialog"], [role="alertdialog"]') !== null && button.closest('.nx-studio') === null)) return;
       setTimeout(() => button.blur(), 0);
     };
+    const root = document.documentElement;
+    const onTab = (event: KeyboardEvent) => { if (event.key === 'Tab') root.dataset['kb'] = 'true'; };
+    const onPointer = () => { delete root.dataset['kb']; };
+    window.addEventListener('keydown', onTab, true);
+    window.addEventListener('pointerdown', onPointer, true);
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKeyUp);
     document.addEventListener('click', onClick);
     return () => {
+      window.removeEventListener('keydown', onTab, true);
+      window.removeEventListener('pointerdown', onPointer, true);
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKeyUp);
       document.removeEventListener('click', onClick);

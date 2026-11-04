@@ -1057,3 +1057,8 @@ Entry points: the sparkle button in the player bar (only when the playing song h
 - **More settings:** beat intensity (off/subtle/normal/strong) for Now Playing and the lyric glow; shortcut customizer (click a key, press a new one; conflicts refused; digits and ? reserved); fade between songs (2/4/6 s, only songs over 4x the fade) and a gentle sleep timer (volume falls over the last 20 s) via a new master fade gain after the analyser.
 - Deliberate changes: audio graph now ends analyser → fade → destination (engine test updated); the "documents every action" shortcut test counts only the fixed keys.
 - Not done: "mood themes from cover" (dynamic accent already follows the cover; a full re-theme is a bigger design task - say if you want it next).
+
+## v0.13.1
+- Lyric glow no longer follows the beat (setting removed). Beat particles now fill the WHOLE width: the inward side walls (which left both edges empty) were replaced by horizontal wrap-around; test asserts particles in the outer 10% on both sides after 1500 frames.
+- Focus rings appear only while Tab is used (`data-kb` on the root); mouse clicks and shortcut keys never leave a ring around icons (e2e).
+- `docs/NEXT_PHASE_PLAN.md`: proposal for online updates, FAQ/About pages, licence/brand, free ways to earn.

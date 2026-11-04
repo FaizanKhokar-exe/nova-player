@@ -48,9 +48,7 @@ export interface Prefs {
   readonly lyricsAlign: LyricsAlign;
   readonly lyricsCase: LyricsCase;
   readonly lyricsFont: LyricsFont;
-  /** A soft glow around the line being sung. */
-  readonly lyricsGlow: boolean;
-  /** How strongly the beat moves the visuals (cover pulse, glow, particles, lyric glow). */
+  /** How strongly the beat moves the visuals (cover pulse, backdrop glow, particles). */
   readonly beatIntensity: BeatIntensity;
   /** Seconds of fade-out at the end of each song and fade-in at the start of the next (0 = off). */
   readonly trackFadeSec: number;
@@ -78,7 +76,6 @@ export interface PrefsActions {
   setLyricsAlign(value: LyricsAlign): void;
   setLyricsCase(value: LyricsCase): void;
   setLyricsFont(value: LyricsFont): void;
-  setLyricsGlow(value: boolean): void;
   setBeatIntensity(value: BeatIntensity): void;
   setTrackFadeSec(value: number): void;
   setSleepFade(value: boolean): void;
@@ -108,7 +105,6 @@ export const DEFAULT_PREFS: Prefs = {
   lyricsAlign: 'left',
   lyricsCase: 'normal',
   lyricsFont: 'default',
-  lyricsGlow: true,
   beatIntensity: 'normal',
   trackFadeSec: 0,
   sleepFade: true,
@@ -166,7 +162,6 @@ function sanitize(raw: unknown): Prefs {
     lyricsAlign: oneOf(p.lyricsAlign, ['left', 'center'], DEFAULT_PREFS.lyricsAlign),
     lyricsCase: oneOf(p.lyricsCase, ['normal', 'upper', 'lower', 'small-caps', 'capitalize'], DEFAULT_PREFS.lyricsCase),
     lyricsFont: oneOf(p.lyricsFont, ['default', 'serif', 'rounded', 'mono'], DEFAULT_PREFS.lyricsFont),
-    lyricsGlow: typeof p.lyricsGlow === 'boolean' ? p.lyricsGlow : DEFAULT_PREFS.lyricsGlow,
     beatIntensity: oneOf(p.beatIntensity, ['off', 'subtle', 'normal', 'strong'], DEFAULT_PREFS.beatIntensity),
     trackFadeSec: typeof p.trackFadeSec === 'number' && (TRACK_FADE_SECONDS as readonly number[]).includes(p.trackFadeSec) ? p.trackFadeSec : 0,
     sleepFade: typeof p.sleepFade === 'boolean' ? p.sleepFade : DEFAULT_PREFS.sleepFade,
@@ -209,7 +204,6 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
     setLyricsAlign: (lyricsAlign) => set({ lyricsAlign }),
     setLyricsCase: (lyricsCase) => set({ lyricsCase }),
     setLyricsFont: (lyricsFont) => set({ lyricsFont }),
-    setLyricsGlow: (lyricsGlow) => set({ lyricsGlow }),
     setBeatIntensity: (beatIntensity) => set({ beatIntensity }),
     setTrackFadeSec: (value) => set({ trackFadeSec: (TRACK_FADE_SECONDS as readonly number[]).includes(value) ? value : 0 }),
     setSleepFade: (sleepFade) => set({ sleepFade }),
@@ -241,7 +235,6 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
         lyricsAlign: s.lyricsAlign,
         lyricsCase: s.lyricsCase,
         lyricsFont: s.lyricsFont,
-        lyricsGlow: s.lyricsGlow,
         beatIntensity: s.beatIntensity,
         trackFadeSec: s.trackFadeSec,
         sleepFade: s.sleepFade,

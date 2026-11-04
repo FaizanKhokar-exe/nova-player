@@ -210,8 +210,7 @@ export function SettingsView() {
           <Chips<LyricsCase> label="Letter case" value={p.lyricsCase} onChange={(v) => prefs.getState().setLyricsCase(v)} options={[{ id: 'normal', label: 'Normal' }, { id: 'upper', label: 'CAPS' }, { id: 'lower', label: 'small' }, { id: 'small-caps', label: 'Small caps' }, { id: 'capitalize', label: 'Title Case' }]} />
         </Setting>
         <Setting title="Lyrics font"><Chips<LyricsFont> label="Lyrics font" value={p.lyricsFont} onChange={(v) => prefs.getState().setLyricsFont(v)} options={[{ id: 'default', label: 'Default' }, { id: 'serif', label: 'Serif' }, { id: 'rounded', label: 'Rounded' }, { id: 'mono', label: 'Mono' }]} /></Setting>
-        <Setting title="Glow on the sung line" hint="Pulses with the beat."><Switch label="Glow on the sung line" checked={p.lyricsGlow} onChange={(v) => prefs.getState().setLyricsGlow(v)} /></Setting>
-        <Setting title="Beat effect" hint="How strongly the beat moves the cover, glow, particles and lyric glow.">
+        <Setting title="Beat effect" hint="How strongly the beat moves the cover, backdrop glow and particles.">
           <Chips<BeatIntensity> label="Beat effect" value={p.beatIntensity} onChange={(v) => prefs.getState().setBeatIntensity(v)} options={[{ id: 'off', label: 'Off' }, { id: 'subtle', label: 'Subtle' }, { id: 'normal', label: 'Normal' }, { id: 'strong', label: 'Strong' }]} />
         </Setting>
         <Setting title="Fade between songs" hint="Fades out at the end of a song and in at the start of the next (songs under about 20 s are left alone).">

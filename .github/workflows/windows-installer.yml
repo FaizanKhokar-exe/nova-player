@@ -1,7 +1,7 @@
 name: Windows installer
 
 # Builds ONE Windows installer (a single NSIS .exe) on a real Windows runner and attaches it as a downloadable
-# artifact. Run it from the Actions tab ("Run workflow"), or push a tag like v0.13.0 to also attach the installer to a
+# artifact. Run it from the Actions tab ("Run workflow"), or push a tag like v0.13.1 to also attach the installer to a
 # GitHub Release. The installer is UNSIGNED unless you add a code-signing certificate yourself (see RELEASING.md):
 # Windows SmartScreen will show "Windows protected your PC" - choose "More info" > "Run anyway".
 

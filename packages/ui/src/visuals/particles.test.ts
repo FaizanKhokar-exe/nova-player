@@ -63,10 +63,26 @@ describe('v0.11.3: frequent beats keep the particles on screen', () => {
     for (let frame = 0; frame < 900; frame += 1) {
       stepParticles(system, { dt: 1 / 60, level: 0.9, pulse: 1, beat: frame % 8 === 0, width: 800, height: 500 });
       for (let i = 0; i < system.count; i += 1) {
-        expect(system.x[i]).toBeGreaterThanOrEqual(-8);
-        expect(system.x[i]).toBeLessThanOrEqual(808);
+        expect(system.x[i]).toBeGreaterThanOrEqual(-14);
+        expect(system.x[i]).toBeLessThanOrEqual(814);
         expect(Math.hypot(system.vx[i] as number, system.vy[i] as number)).toBeLessThanOrEqual(MAX_PARTICLE_SPEED + 1e-3);
       }
     }
+  });
+});
+
+describe('v0.13.1: the particles fill the whole width, including both outer edges', () => {
+  it('after many beats there are particles in the outer 10% on the left AND the right', async () => {
+    const { createParticles, stepParticles } = await import('./particles.js');
+    const system = createParticles(150, 1000, 600);
+    for (let frame = 0; frame < 1500; frame += 1) stepParticles(system, { dt: 1 / 60, level: 0.8, pulse: 1, beat: frame % 10 === 0, width: 1000, height: 600 });
+    let left = 0;
+    let right = 0;
+    for (let i = 0; i < system.count; i += 1) {
+      if ((system.x[i] as number) < 100) left += 1;
+      if ((system.x[i] as number) > 900) right += 1;
+    }
+    expect(left).toBeGreaterThanOrEqual(8);
+    expect(right).toBeGreaterThanOrEqual(8);
   });
 });
