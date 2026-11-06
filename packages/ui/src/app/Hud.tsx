@@ -8,6 +8,7 @@ export type HudState =
   | { readonly kind: 'action'; readonly seq: number; readonly icon: IconName; readonly label: string; readonly on: boolean };
 
 const SHOW_MS = 1500;
+const SEGMENTS = 20;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Three arcs: more of them light up as the volume rises, so the speaker itself says how loud it is. */
@@ -33,6 +34,7 @@ function Speaker({ level, muted }: { level: number; muted: boolean }) {
 export function Hud() {
   const { playback, prefs } = useServices();
   const [hud, setHud] = useState<HudState | undefined>(undefined);
+  const [visible, setVisible] = useState(false);
 
   useEffect(() => {
     let seq = 0;
@@ -40,8 +42,9 @@ export function Hud() {
     const show = (next: DistributiveOmit<HudState, 'seq'>): void => {
       seq += 1;
       setHud({ ...next, seq } as HudState);
+      setVisible(true);
       if (timer !== undefined) clearTimeout(timer);
-      timer = setTimeout(() => setHud(undefined), SHOW_MS);
+      timer = setTimeout(() => setVisible(false), SHOW_MS); // the content stays, so the card can fade out instead of vanishing
     };
     let last = playback.getState();
     let lastSpeed = prefs.getState().speed;
@@ -76,21 +79,32 @@ export function Hud() {
 
   if (hud === undefined) return <div className="nx-hud-live nx-sr-only" role="status" aria-live="polite" />;
   const percent = hud.kind === 'volume' ? Math.round((hud.muted ? 0 : hud.level) * 100) : 0;
+  const lit = Math.round((percent / 100) * SEGMENTS);
   return (
     <>
       <div className="nx-hud-live nx-sr-only" role="status" aria-live="polite">{hud.kind === 'volume' ? (hud.muted ? 'Muted' : `Volume ${percent}%`) : hud.label}</div>
-      {hud.kind === 'volume' ? (
-        <div className="nx-hud" data-kind="volume" data-testid="hud-volume" key={hud.seq} data-dir={hud.delta > 0 ? 'up' : hud.delta < 0 ? 'down' : 'none'} style={{ ['--hud-level' as string]: `${percent}%` }} aria-hidden="true">
-          <Speaker level={hud.level} muted={hud.muted} />
-          <div className="nx-hud-bar"><div className="nx-hud-fill" /><div className="nx-hud-knob" /></div>
-          <span className="nx-hud-num">{hud.muted ? 'Muted' : `${percent}`}</span>
-        </div>
-      ) : (
-        <div className="nx-hud" data-kind="action" data-on={hud.on} data-testid="hud-action" key={hud.seq} aria-hidden="true">
-          <span className="nx-hud-icon"><Icon name={hud.icon} size={26} /></span>
-          <span className="nx-hud-label">{hud.label}</span>
-        </div>
-      )}
+      <div className="nx-hud" data-show={visible} data-kind={hud.kind} aria-hidden="true">
+        {/* The card is NOT re-created on every key press: segments and the number change in place, so they glide instead of restarting. */}
+        {hud.kind === 'volume' ? (
+          <div className="nx-hud-card nx-hud-card--volume" data-testid="hud-volume" key="volume" data-dir={hud.delta > 0 ? 'up' : hud.delta < 0 ? 'down' : 'none'} data-muted={hud.muted}>
+            <span key={hud.seq} className="nx-hud-icon"><Speaker level={hud.level} muted={hud.muted} /></span>
+            <div className="nx-hud-meter">
+              {Array.from({ length: SEGMENTS }, (_, i) => (
+                <i key={i} data-lit={i < lit} style={{ ['--i' as string]: i, ['--rise' as string]: `${i * 7}ms`, ['--fall' as string]: `${(SEGMENTS - i) * 5}ms` }} />
+              ))}
+            </div>
+            <span className="nx-hud-num"><b key={hud.seq}>{hud.muted ? 'Muted' : percent}</b>{!hud.muted && <small>%</small>}</span>
+          </div>
+        ) : (
+          <div className="nx-hud-card nx-hud-card--action" data-testid="hud-action" key="action" data-on={hud.on}>
+            <span key={hud.seq} className="nx-hud-badge">
+              <svg className="nx-hud-ring" viewBox="0 0 48 48" aria-hidden="true"><circle cx="24" cy="24" r="22" pathLength="100" /></svg>
+              <Icon name={hud.icon} size={28} />
+            </span>
+            <span key={`l${hud.seq}`} className="nx-hud-label">{hud.label}</span>
+          </div>
+        )}
+      </div>
     </>
   );
 }

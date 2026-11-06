@@ -56,7 +56,7 @@ const PEAK_FRAMES = 240;
 
 export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnalyzer {
   const sensitivity = options.sensitivity ?? 1.16;
-  const minGapMs = options.minGapMs ?? 125;
+  const minGapMs = options.minGapMs ?? 170;
   const floor = options.floor ?? 0.1;
   const window = Math.max(2, options.averageFrames ?? 30);
 
@@ -105,7 +105,7 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
 
       const dt = lastMs === undefined ? 16 : Math.max(0, Math.min(100, nowMs - lastMs));
       lastMs = nowMs;
-      pulse = Math.max(0, pulse - dt / 260);
+      pulse = Math.max(0, pulse - dt / 340);
 
       let beat = false;
       // The first frames only teach the average what this track sounds like; nothing can be "above" an average yet.
@@ -113,12 +113,12 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
       frames += 1;
       // A kick (bass) OR a snare / clap / hi-hat hit (mid band) counts, so busy tracks pulse far more often than a bass-only rule would.
       const kick = rawBass >= floor && rawBass >= average * sensitivity;
-      const snare = rawMid >= floor * 1.4 && rawMid >= midAverage * (sensitivity + 0.12);
-      const hit = rawFlux >= 0.06 && rawFlux >= fluxAverage * (sensitivity + 0.6);
+      const snare = rawMid >= floor * 1.4 && rawMid >= midAverage * (sensitivity + 0.22);
+      const hit = rawFlux >= 0.06 && rawFlux >= fluxAverage * (sensitivity + 0.9);
       if (frames > 10 && peak > SILENCE && (kick || snare || hit) && nowMs - lastBeatMs >= minGapMs) {
         beat = true;
         lastBeatMs = nowMs;
-        pulse = 1;
+        pulse = 0.85;
       }
       // Rises quickly (a new loud passage becomes the reference within a few frames), falls slowly.
       average += (rawBass - average) / (rawBass > average ? 8 : window);

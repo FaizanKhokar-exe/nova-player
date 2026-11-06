@@ -71,7 +71,7 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
   useEffect(() => {
     const element = root.current;
     if (element === null || reduceMotion || beatIntensity === 'off') return;
-    const gain = { off: 0, subtle: 0.5, normal: 1, strong: 1.5 }[beatIntensity];
+    const gain = { off: 0, subtle: 0.35, normal: 0.65, strong: 1.05 }[beatIntensity];
     const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover, .nx-np-pulse'));
     const off = visuals.subscribe((frame) => {
       const value = Math.min(1, frame.levels.pulse * gain).toFixed(3);

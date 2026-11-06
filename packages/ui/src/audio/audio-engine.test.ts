@@ -16,7 +16,7 @@ describe('beat analyzer', () => {
     for (let i = 0; i < 60; i += 1) analyzer.analyze(frame(70), 43, (now += 16)); // steady bed
     const kick = analyzer.analyze(frame(220), 43, (now += 16));
     expect(kick.beat).toBe(true);
-    expect(kick.pulse).toBe(1);
+    expect(kick.pulse).toBeCloseTo(0.85, 2);
     const tooSoon = analyzer.analyze(frame(230), 43, now + 16);
     expect(tooSoon.beat).toBe(false); // inside the minimum gap
     expect(tooSoon.pulse).toBeLessThan(1);
