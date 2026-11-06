@@ -44,6 +44,9 @@ export interface StudioState {
   /** The song's audio could not be analysed: the times are evenly spaced guesses. */
   readonly analysisFailed: boolean;
   readonly canUndo: boolean;
+  /** Where the listener marked the singing as starting / ending (ms), or undefined to let the estimate decide. */
+  readonly singStartMs: number | undefined;
+  readonly singEndMs: number | undefined;
   readonly save: { readonly status: SaveStatus; readonly outcome: SaveLyricsResultDto['outcome'] | undefined; readonly message: string | undefined };
 
   openStudio(): void;
@@ -64,6 +67,12 @@ export interface StudioState {
   shiftAll(deltaMs: number): void;
   undo(): void;
   audition(index: number): void;
+  /** Adds a line of words after line `afterIndex` (-1 = at the very start); it is timed between its neighbours and locked, ready to nudge. */
+  insertLine(afterIndex: number, text: string): void;
+  removeLine(index: number): void;
+  editLine(index: number, text: string): void;
+  /** Marks the singing as starting / ending at the playing position (`clear` removes both) and estimates again around it. */
+  markSinging(which: 'start' | 'end' | 'clear'): void;
   saveLrc(): Promise<void>;
 }
 export type StudioStoreApi = StoreApi<StudioState>;
@@ -84,7 +93,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
   let features: VocalFeatures | undefined;
   let weights: number[] = [];
   let token = 0;
-  let undoStack: { times: readonly number[]; locks: ReadonlySet<number>; confidence: readonly number[] }[] = [];
+  let undoStack: { times: readonly number[]; locks: ReadonlySet<number>; confidence: readonly number[]; lines: readonly PlainLine[] }[] = [];
 
   return createStore<StudioState>((set, get) => {
     const monotonic = (times: readonly number[], duration: number): number[] => {
@@ -94,7 +103,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
     };
     const remember = (): void => {
       const s = get();
-      undoStack = [...undoStack.slice(-(UNDO_LIMIT - 1)), { times: s.times, locks: s.locks, confidence: s.confidence }];
+      undoStack = [...undoStack.slice(-(UNDO_LIMIT - 1)), { times: s.times, locks: s.locks, confidence: s.confidence, lines: s.lines }];
       set({ canUndo: true });
     };
     const fresh = {
@@ -116,11 +125,14 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
       durationMs: 0,
       analysisFailed: false,
       canUndo: false,
+      singStartMs: undefined as number | undefined,
+      singEndMs: undefined as number | undefined,
       save: EMPTY_SAVE as StudioState['save'],
     };
     let syncedLines: TimedLine[] | undefined;
     let syncedSourceMs: number | undefined;
 
+    const windowOf = (s: StudioState): { windowStartMs?: number; windowEndMs?: number } => ({ ...(s.singStartMs !== undefined && { windowStartMs: s.singStartMs }), ...(s.singEndMs !== undefined && { windowEndMs: s.singEndMs }) });
     let resolveSequence = 0;
     async function resolveFrom(fromIndex: number): Promise<void> {
       const s = get();
@@ -130,7 +142,7 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
       for (let i = 0; i < fromIndex && i < s.times.length; i += 1) anchors.set(i, s.times[i] ?? 0);
       for (const i of s.locks) anchors.set(i, s.times[i] ?? 0);
       const token0 = token;
-      const result = await alignLinesAsync(weights, features, { anchors, breakBefore: s.lines.map((l) => l.breakBefore) }, () => mine !== resolveSequence || token0 !== token);
+      const result = await alignLinesAsync(weights, features, { anchors, breakBefore: s.lines.map((l) => l.breakBefore), ...windowOf(s) }, () => mine !== resolveSequence || token0 !== token);
       if (result === undefined) return;
       const now = get();
       // Lines the listener touched while this was running keep their newer value.
@@ -209,14 +221,14 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         if (mine !== token) return;
         const engineDuration = playback.getState().engine.durationMs ?? 0;
         let analysed: VocalFeatures | undefined;
-        if (signal !== undefined) analysed = await analyseSignal(signal.samples, signal.sampleRate, { onProgress: (progress) => mine === token && set({ progress }), isCancelled: () => mine !== token });
+        if (signal !== undefined) analysed = await analyseSignal(signal.samples, signal.sampleRate, { ...(signal.side !== undefined && { side: signal.side }), onProgress: (progress) => mine === token && set({ progress }), isCancelled: () => mine !== token });
         if (mine !== token) return;
         const failed = analysed === undefined;
         const duration = analysed?.durationMs ?? engineDuration;
         features =
           analysed ??
           ({ frameMs: 20, durationMs: duration, level: new Float32Array(0), onset: new Float32Array(0), active: new Uint8Array(0), activeCum: new Float32Array(1), phrases: [] } satisfies VocalFeatures);
-        const result = (await alignLinesAsync(weights, features, { breakBefore: lines.map((l) => l.breakBefore) }, () => mine !== token)) ?? { startsMs: [] as number[], confidence: [] as number[] };
+        const result = (await alignLinesAsync(weights, features, { breakBefore: lines.map((l) => l.breakBefore), ...windowOf(s) }, () => mine !== token)) ?? { startsMs: [] as number[], confidence: [] as number[] };
         if (mine !== token) return;
         let times: number[] = useSynced && syncedLines !== undefined ? syncedLines.map((l) => l.timeMs) : [...result.startsMs];
         let note: string | undefined;
@@ -301,7 +313,8 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         const last = undoStack[undoStack.length - 1];
         if (last === undefined) return;
         undoStack = undoStack.slice(0, -1);
-        set({ times: last.times, locks: last.locks, confidence: last.confidence, canUndo: undoStack.length > 0 });
+        weights = last.lines.map((l) => lineWeight(l.text));
+        set({ lines: last.lines, times: last.times, locks: last.locks, confidence: last.confidence, canUndo: undoStack.length > 0, selected: Math.min(get().selected, Math.max(0, last.lines.length - 1)) });
       },
 
       audition(index) {
@@ -312,6 +325,59 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         p.seekMs(Math.max(0, time - PRE_ROLL_MS));
         if (!p.engine.playing) void p.togglePlay();
         set({ selected: index });
+      },
+
+      insertLine(afterIndex, rawText) {
+        const s = get();
+        const text = rawText.replace(/\s+/g, ' ').trim();
+        if (s.step !== 'timing' || text === '' || text.length > 400) return;
+        remember();
+        const at = Math.max(-1, Math.min(s.lines.length - 1, afterIndex)) + 1;
+        const before = at > 0 ? (s.times[at - 1] ?? 0) : 0;
+        const after = at < s.times.length ? (s.times[at] ?? s.durationMs) : Math.min(s.durationMs > 0 ? s.durationMs : before + 4000, before + 4000);
+        const time = at === 0 ? Math.max(0, Math.round(after - 2000)) : Math.round(before + Math.max(300, (after - before) / 2));
+        const lines = [...s.lines.slice(0, at), { text, breakBefore: false } as PlainLine, ...s.lines.slice(at)];
+        const times = [...s.times.slice(0, at), time, ...s.times.slice(at)];
+        const confidence = [...s.confidence.slice(0, at), 1, ...s.confidence.slice(at)];
+        const locks = new Set<number>();
+        for (const i of s.locks) locks.add(i >= at ? i + 1 : i);
+        locks.add(at);
+        weights = lines.map((l) => lineWeight(l.text));
+        set({ lines, times: monotonic(times, s.durationMs), confidence, locks, selected: at, save: EMPTY_SAVE });
+      },
+
+      removeLine(index) {
+        const s = get();
+        if (s.step !== 'timing' || s.lines.length <= 1 || index < 0 || index >= s.lines.length) return;
+        remember();
+        const drop = <T,>(list: readonly T[]): T[] => list.filter((_, i) => i !== index);
+        const locks = new Set<number>();
+        for (const i of s.locks) if (i !== index) locks.add(i > index ? i - 1 : i);
+        const lines = drop(s.lines);
+        weights = lines.map((l) => lineWeight(l.text));
+        set({ lines, times: drop(s.times), confidence: drop(s.confidence), locks, selected: Math.min(index, lines.length - 1), save: EMPTY_SAVE });
+      },
+
+      editLine(index, rawText) {
+        const s = get();
+        const text = rawText.replace(/\s+/g, ' ').trim();
+        const old = s.lines[index];
+        if (s.step !== 'timing' || old === undefined || text === '' || text === old.text) return;
+        remember();
+        const lines = s.lines.map((l, i) => (i === index ? { ...l, text } : l));
+        weights = lines.map((l) => lineWeight(l.text));
+        set({ lines, save: EMPTY_SAVE });
+      },
+
+      markSinging(which) {
+        const s = get();
+        if (s.step !== 'timing') return;
+        remember();
+        const here = Math.max(0, Math.round(playback.getState().livePositionMs()));
+        if (which === 'clear') set({ singStartMs: undefined, singEndMs: undefined });
+        else if (which === 'start') set({ singStartMs: here });
+        else set({ singEndMs: here });
+        void resolveFrom(0);
       },
 
       async saveLrc() {

@@ -118,7 +118,7 @@ export function createAudioEngine(options: AudioEngineOptions): AudioEngine {
         const gain = created.createGain();
         const analysis = created.createAnalyser();
         analysis.fftSize = fftSize;
-        analysis.smoothingTimeConstant = 0.72;
+        analysis.smoothingTimeConstant = 0.55; // lower = sharper hits for the beat detector (the bars ease on their own)
         analysis.minDecibels = -88;
         analysis.maxDecibels = -12;
         let previous: AudioNodeLike = node;

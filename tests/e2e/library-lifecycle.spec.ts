@@ -47,7 +47,7 @@ test('the library database is created under userData at startup and closed clean
     // And the file is a fully migrated, valid database.
     const db = new Database(dbFile, { readonly: true });
     try {
-      expect(db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()).toEqual({ v: 7 }); // migration 7 (custom-media, v0.11.3) is the latest (was 6)
+      expect(db.prepare('SELECT MAX(version) AS v FROM schema_migrations').get()).toEqual({ v: 8 }); // migration 8 (track-edits, v0.15.0) is the latest (was 7)
       expect(db.prepare('SELECT COUNT(*) AS n FROM tracks').get()).toEqual({ n: 0 });
     } finally {
       db.close();

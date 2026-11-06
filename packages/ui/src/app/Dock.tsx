@@ -34,6 +34,8 @@ export function Dock() {
   const sleep = useAudioControls((s) => s.sleep);
   const npOpen = useUi((s) => s.nowPlayingOpen);
   const speedButton = useRef<HTMLButtonElement | null>(null);
+  const eqButton = useRef<HTMLButtonElement | null>(null);
+  const eqOn = usePrefs((s) => s.eqEnabled);
   const sleepButton = useRef<HTMLButtonElement | null>(null);
 
   const track = current?.track;
@@ -70,6 +72,7 @@ export function Dock() {
               <span className="nx-dock-title nx-ellipsis nx-text" dir="auto" data-testid="player-title">{track.title}</span>
               <span className="nx-dock-artist nx-ellipsis nx-text" dir="auto" data-testid="player-artist">{track.artist}</span>
             </div>
+            <button type="button" className="nx-icon-btn nx-icon-btn--small" aria-label="Edit song info" data-testid="player-edit-info" onClick={() => ui.getState().openModal({ kind: 'edit-info', track })}><Icon name="edit" size={16} /></button>
             <HeartButton className="nx-icon-btn--small" favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="player-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
           </>
         )}
@@ -115,6 +118,9 @@ export function Dock() {
         </button>
         <button type="button" className="nx-icon-btn" aria-label="Lyrics" data-keys="L" data-testid="player-lyrics" disabled={track === undefined} onClick={() => ui.getState().openNowPlaying('lyrics')}>
           <Icon name="lyrics" size={19} />
+        </button>
+        <button ref={eqButton} type="button" className="nx-icon-btn" aria-label="Equalizer" data-active={eqOn} data-testid="player-eq" onClick={() => ui.getState().openPopover({ kind: 'eq', anchor: anchorOf(eqButton.current) })}>
+          <Icon name="eq" size={19} />
         </button>
         <button ref={speedButton} type="button" className="nx-icon-btn" aria-label={`Playback speed ${speed}×`} data-active={speed !== 1} data-testid="player-speed" onClick={() => ui.getState().openPopover({ kind: 'speed', anchor: anchorOf(speedButton.current) })}>
           <Icon name="speed" size={19} />

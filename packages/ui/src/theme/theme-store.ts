@@ -1,4 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
+import { MOOD_MODES, type MoodMode } from './mood.js';
 import { accentsFromColor, hexToRgb, rgbToHex, type Accents } from './palette.js';
 
 export type ThemeMode = 'dark' | 'light';
@@ -27,6 +28,9 @@ export interface ThemeState {
   readonly reduceMotion: boolean;
   /** Lyric text size in px. */
   readonly lyricsSize: number;
+  /** How far the cover's colour reaches into the app's surfaces. */
+  readonly mood: MoodMode;
+  setMood(mood: MoodMode): void;
   setMode(mode: ThemeMode): void;
   setAccent(accent: AccentChoice): void;
   setCustomColor(hex: string): void;
@@ -37,8 +41,8 @@ export type ThemeStoreApi = StoreApi<ThemeState>;
 
 const KEY = 'nova.theme.v1';
 export const LYRICS_SIZE_RANGE = { min: 22, max: 52 } as const;
-type Persisted = Pick<ThemeState, 'mode' | 'accent' | 'customColor' | 'reduceMotion' | 'lyricsSize'>;
-const DEFAULTS: Persisted = { mode: 'dark', accent: 'dynamic', customColor: '#5b8cff', reduceMotion: false, lyricsSize: 34 };
+type Persisted = Pick<ThemeState, 'mode' | 'accent' | 'customColor' | 'reduceMotion' | 'lyricsSize' | 'mood'>;
+const DEFAULTS: Persisted = { mode: 'dark', accent: 'dynamic', customColor: '#5b8cff', reduceMotion: false, lyricsSize: 34, mood: 'tinted' };
 
 type StorageLike = Pick<Storage, 'getItem' | 'setItem'>;
 
@@ -61,6 +65,7 @@ function load(storage: StorageLike | undefined): Persisted {
       accent: typeof parsed.accent === 'string' && known.has(parsed.accent) ? parsed.accent : DEFAULTS.accent,
       customColor: typeof parsed.customColor === 'string' && hexToRgb(parsed.customColor) !== undefined ? parsed.customColor : DEFAULTS.customColor,
       reduceMotion: parsed.reduceMotion === true,
+      mood: typeof parsed.mood === 'string' && (MOOD_MODES as readonly string[]).includes(parsed.mood) ? parsed.mood : DEFAULTS.mood,
       lyricsSize: typeof parsed.lyricsSize === 'number' ? Math.min(LYRICS_SIZE_RANGE.max, Math.max(LYRICS_SIZE_RANGE.min, Math.round(parsed.lyricsSize))) : DEFAULTS.lyricsSize,
     };
   } catch {
@@ -73,6 +78,7 @@ export function createThemeStore(storage: StorageLike | undefined = defaultStora
   const store = createStore<ThemeState>((set) => ({
     ...load(storage),
     setMode: (mode) => set({ mode }),
+    setMood: (mood) => set({ mood }),
     setAccent: (accent) => set({ accent }),
     setCustomColor: (hex) => {
       if (hexToRgb(hex) !== undefined) set({ customColor: hex.startsWith('#') ? hex.toLowerCase() : `#${hex.toLowerCase()}`, accent: 'custom' });
@@ -82,7 +88,7 @@ export function createThemeStore(storage: StorageLike | undefined = defaultStora
   }));
   store.subscribe((s) => {
     try {
-      const value: Persisted = { mode: s.mode, accent: s.accent, customColor: s.customColor, reduceMotion: s.reduceMotion, lyricsSize: s.lyricsSize };
+      const value: Persisted = { mode: s.mode, accent: s.accent, customColor: s.customColor, reduceMotion: s.reduceMotion, lyricsSize: s.lyricsSize, mood: s.mood };
       storage?.setItem(KEY, JSON.stringify(value));
     } catch {
       /* private window / blocked storage: the choice just lasts for this session */

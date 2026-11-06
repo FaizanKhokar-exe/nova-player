@@ -82,6 +82,37 @@ describe('Lyric Studio store', () => {
     expect(h.store.getState().locks.has(0)).toBe(false);
   });
 
+  it('adds, rewrites and removes lines (shifting locks), and undo brings them back', async () => {
+    const h = harness();
+    h.store.getState().openStudio();
+    h.store.getState().setText(LYRICS.join('\n'));
+    await h.store.getState().begin();
+    const api = h.store.getState();
+    api.toggleLock(2);
+    const before = [...h.store.getState().times];
+    h.store.getState().insertLine(0, '  a   brand new line ');
+    let s = h.store.getState();
+    expect(s.lines).toHaveLength(5);
+    expect(s.lines[1]?.text).toBe('a brand new line');
+    expect(s.times[1]).toBeGreaterThan(before[0] ?? 0);
+    expect(s.times[1]).toBeLessThan(before[1] ?? 0);
+    expect(s.locks.has(1)).toBe(true);
+    expect(s.locks.has(3)).toBe(true); // the old lock on line 2 moved down with its line
+    expect(s.selected).toBe(1);
+    h.store.getState().editLine(1, 'a better line');
+    expect(h.store.getState().lines[1]?.text).toBe('a better line');
+    h.store.getState().removeLine(1);
+    s = h.store.getState();
+    expect(s.lines.map((l) => l.text)).toEqual(LYRICS);
+    expect(s.locks.has(2)).toBe(true);
+    h.store.getState().undo(); // the removal
+    expect(h.store.getState().lines).toHaveLength(5);
+    h.store.getState().insertLine(-1, 'first of all');
+    expect(h.store.getState().lines[0]?.text).toBe('first of all');
+    expect(h.store.getState().times[0]).toBeLessThanOrEqual(h.store.getState().times[1] ?? 0);
+    h.store.getState().insertLine(0, '   ');
+    expect(h.store.getState().lines).toHaveLength(6); // blank text adds nothing
+  });
   it('nudges inside its neighbours, shifts everything, and keeps times in order', async () => {
     const h = harness();
     h.store.getState().openStudio();

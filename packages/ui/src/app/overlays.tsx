@@ -223,6 +223,13 @@ export function ModalLayer() {
       </Dialog>
     );
   }
+  if (modal.kind === 'edit-info') {
+    return (
+      <Dialog title="Edit song info" onClose={close} label="Edit song info">
+        <EditInfoForm track={modal.track} onClose={close} />
+      </Dialog>
+    );
+  }
   // add-to-playlist
   return (
     <Dialog title="Add to playlist" onClose={close} label="Add to playlist">
@@ -255,6 +262,9 @@ export function ModalLayer() {
 
 /* ------------------------------ popovers (speed, sleep) ------------------------------ */
 
+import { EditInfoForm } from './EditInfoForm.js';
+import { EqualizerPanel } from './EqualizerPanel.js';
+
 export function PopoverLayer() {
   const popover = useUi((s) => s.popover);
   const { ui, prefs, audioControls } = useServices();
@@ -267,10 +277,19 @@ export function PopoverLayer() {
   useDismiss(popover !== undefined, close, ref);
   if (popover === undefined || popover.kind === 'volume') return null;
 
-  const width = 260;
+  const width = popover.kind === 'eq' ? 440 : 260;
   const left = Math.max(8, Math.min(popover.anchor.left + popover.anchor.width / 2 - width / 2, window.innerWidth - width - 8));
   const bottom = Math.max(8, window.innerHeight - popover.anchor.top + 10);
   const style: CSSProperties = { left, bottom, width };
+
+  if (popover.kind === 'eq') {
+    return (
+      <div ref={ref} className="nx-popover nx-popover--eq" role="dialog" aria-label="Equalizer" style={{ ...style, maxWidth: 'calc(100vw - 16px)' }} data-testid="eq-popover">
+        <div className="nx-menu-title" style={{ padding: '2px 4px 10px' }}>Equalizer</div>
+        <EqualizerPanel testIdPrefix="eqpop" />
+      </div>
+    );
+  }
 
   if (popover.kind === 'speed') {
     return (

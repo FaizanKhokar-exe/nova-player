@@ -16,6 +16,17 @@ describe('prefs store', () => {
     expect(s.wallpaperDim).toBeGreaterThan(0); // text stays readable on a wallpaper by default
     expect(s.lyricsBackdrop).toBe('particles');
   });
+  it('lyrics: Apple by default, sung lines dim, and a saved Magnet becomes Apple', () => {
+    const fresh = createPrefsStore(memory()).getState();
+    expect(fresh.lyricsAnimation).toBe('apple');
+    expect(fresh.sungLines).toBe('dim');
+    const old = createPrefsStore(memory(JSON.stringify({ lyricsAnimation: 'magnet', sungLines: 'nonsense' }))).getState();
+    expect(old.lyricsAnimation).toBe('apple');
+    expect(old.sungLines).toBe('dim');
+    const storage = memory();
+    createPrefsStore(storage).getState().setSungLines('hide');
+    expect(createPrefsStore(storage).getState().sungLines).toBe('hide');
+  });
   it('persists and reloads', () => {
     const storage = memory();
     const a = createPrefsStore(storage);

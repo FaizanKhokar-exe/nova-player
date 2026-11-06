@@ -1,6 +1,7 @@
 import { app, BrowserWindow, dialog, ipcMain, net, type IpcMainInvokeEvent, type OpenDialogOptions } from 'electron';
 import path from 'node:path';
 import fsPromises from 'node:fs/promises';
+import { parseTrackId } from '@nova/domain';
 import fsSync from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PLAYLIST_LIMITS, WALLPAPER_LIMITS } from '@nova/shared';
@@ -37,7 +38,7 @@ import { resolveAppLocation } from './shell/app-location.js';
 import { bridgeApplicationEvents, registerLibraryIpc, type PublishEvent } from './ipc/register-library-ipc.js';
 import { bridgePlaybackEvents, registerPlaybackIpc } from './ipc/register-playback-ipc.js';
 import { registerCollectionsIpc } from './ipc/register-collections-ipc.js';
-import { createNativeImageResizer, createWallpaperPorts, wallpaperDirectory } from './media/electron-images.js';
+import { trimCoverBars, createNativeImageResizer, createWallpaperPorts, wallpaperDirectory } from './media/electron-images.js';
 import type { AppShell } from './shell/app-shell.js';
 import { createElectronShell } from './shell/electron-shell.js';
 import { createPinnedFetchText, writeLrcAtomic } from './lyrics/lyrics-ports.js';
@@ -380,9 +381,24 @@ function startApplication(): void {
     registrar: { handle: (channel, listener) => ipcMain.handle(channel, (event, request: unknown) => listener(event, request)) },
     application: playbackApplication,
     sidecars: trackSidecars,
+    trimCover: trimCoverBars,
     pickLyricsFile,
     pickArtworkFile,
     onArtworkChanged: () => trackThumbnails.invalidate(),
+    editTrackInfo: (trackId, edit) => {
+      const edits = libraryServices?.trackEdits;
+      const id = parseTrackId(trackId);
+      if (edits === undefined || id === undefined) return 'unknown';
+      if (edit === undefined) {
+        if (libraryServices?.trackRepository.getById(id) === undefined) return 'unknown';
+        const removed = edits.clearEdit(id);
+        if (removed) publishToRenderers('library:changed', { reason: 'tags-edited' });
+        return removed ? 'done' : 'nothing';
+      }
+      if (!edits.setEdit(id, edit)) return 'unknown';
+      publishToRenderers('library:changed', { reason: 'tags-edited' });
+      return 'done';
+    },
     describeTrack: (trackId) => {
       const track = libraryServices?.trackRepository.getById(trackId as never);
       if (track === undefined) return undefined;

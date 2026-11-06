@@ -701,6 +701,21 @@ test('Lyric style settings apply to the lyrics panel, and Lyric Studio keeps rep
   await app.close();
 });
 
+test('volume HUD appears on a volume key, and Sung lines can be set to Hide', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.keyboard.press('m');
+  await expect(window.getByTestId('hud-volume')).toBeVisible();
+  await expect(window.getByTestId('hud-volume')).toContainText('Muted');
+  await window.keyboard.press('Control+,');
+  await expect(window.getByRole('button', { name: 'Magnet' })).toHaveCount(0);
+  await window.getByRole('button', { name: 'Hide', exact: true }).click();
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await expect(window.getByTestId('lyrics-panel')).toBeVisible();
+  await app.close();
+});
+
 test('no icon shows a focus ring after mouse clicks and shortcut keys; Tab brings the ring back', async () => {
   const { app, window } = await openApp();
   await rowFor(window, 'Alpha').locator('.nx-row-title').click();
@@ -712,5 +727,47 @@ test('no icon shows a focus ring after mouse clicks and shortcut keys; Tab bring
   expect(['none', 'none-focused']).toContain(await ring());
   await window.keyboard.press('Tab');
   expect(await ring()).toBe('solid');
+  await app.close();
+});
+
+test('mood themes: the app surfaces take the cover colour (Tinted by default), Immersive goes deeper, Off releases them', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Courtside').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  const bg = () => window.evaluate(() => ({ mood: document.documentElement.dataset['mood'], bg: document.documentElement.style.getPropertyValue('--bg') }));
+  await expect.poll(async () => (await bg()).bg, { timeout: 10_000 }).toMatch(/^rgb\(/);
+  expect((await bg()).mood).toBe('tinted');
+  await shot(window, '14-mood-tinted');
+  await window.keyboard.press('Control+,');
+  await window.getByRole('button', { name: 'Immersive' }).click();
+  await expect.poll(async () => (await bg()).mood).toBe('immersive');
+  await shot(window, '15-mood-immersive');
+  await window.getByRole('button', { name: 'Off', exact: true }).first().click();
+  await expect.poll(async () => (await bg()).bg).toBe('');
+  await app.close();
+});
+
+test('equalizer opens from the player bar, and a song name can be corrected and reset', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByTestId('player-eq').click();
+  await expect(window.getByTestId('eq-popover')).toBeVisible();
+  await window.getByTestId('eqpop-switch').click();
+  await expect(window.getByTestId('eqpop-switch')).toHaveAttribute('aria-checked', 'true');
+  await window.keyboard.press('Escape');
+  await expect(window.getByTestId('eq-popover')).toHaveCount(0);
+
+  await window.getByTestId('player-edit-info').click();
+  await window.getByTestId('edit-title').fill('01 - Alpha Renamed (Official Video) www.site.com');
+  await window.getByTestId('edit-tidy').click();
+  await expect(window.getByTestId('edit-title')).toHaveValue('Alpha Renamed');
+  await window.getByTestId('edit-save').click();
+  await expect(window.getByTestId('player-title')).toHaveText('Alpha Renamed');
+  await expect(rowFor(window, 'Alpha Renamed')).toBeVisible();
+
+  await window.getByTestId('player-edit-info').click();
+  await window.getByTestId('edit-reset').click();
+  await expect(window.getByTestId('player-title')).toHaveText('Alpha');
   await app.close();
 });

@@ -7,6 +7,8 @@ import type { ThumbnailCache, ThumbnailState } from '../media/thumbnail-cache.js
 import { PlaybackStoreProvider } from '../playback/PlaybackStoreProvider.js';
 import type { PlaybackStoreApi } from '../playback/playback-store.js';
 import { Cover } from './Cover.js';
+import { Hud } from './Hud.js';
+import { createPrefsStore } from '../prefs/prefs-store.js';
 import { QueueDrawer } from './QueueDrawer.js';
 import { ServicesProvider, type AppServices } from './services.js';
 import { singDurationMs } from './Lyrics.js';
@@ -101,5 +103,32 @@ describe('singDurationMs (the left-to-right fill of the line being sung)', () =>
     expect(singDurationMs('a'.repeat(40), 10_000)).toBe(3400); // 85 ms per character
     expect(singDurationMs('a'.repeat(40), 2000)).toBe(1880); // capped by the gap (94 %)
     expect(singDurationMs('x', 100)).toBe(400); // and never below 400 ms
+  });
+});
+
+
+describe('Hud', () => {
+  it('shows the volume with the right number, and a speaker whose waves follow the level', () => {
+    const store = createStore(() => ({ engine: { volume: 0.5, muted: false, playing: false, loaded: false }, session: undefined })) as unknown as PlaybackStoreApi;
+    render(withServices({ playback: store, prefs: createPrefsStore({ getItem: () => null, setItem: () => undefined }) }, <Hud />));
+    expect(screen.queryByTestId('hud-volume')).toBeNull();
+    act(() => store.setState({ engine: { volume: 0.8, muted: false, playing: false, loaded: false } } as never));
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('80');
+    expect(screen.getByTestId('hud-volume').querySelectorAll('[data-on="true"]')).toHaveLength(3);
+    act(() => store.setState({ engine: { volume: 0.2, muted: false, playing: false, loaded: false } } as never));
+    expect(screen.getByTestId('hud-volume')).toHaveAttribute('data-dir', 'down');
+    expect(screen.getByTestId('hud-volume').querySelectorAll('[data-on="true"]')).toHaveLength(1);
+    act(() => store.setState({ engine: { volume: 0.2, muted: true, playing: false, loaded: false } } as never));
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('Muted');
+  });
+  it('confirms play / pause and shuffle', () => {
+    const store = createStore(() => ({ engine: { volume: 1, muted: false, playing: true, loaded: true }, session: { shuffle: false, repeatMode: 'off' } })) as unknown as PlaybackStoreApi;
+    render(withServices({ playback: store, prefs: createPrefsStore({ getItem: () => null, setItem: () => undefined }) }, <Hud />));
+    act(() => store.setState({ engine: { volume: 1, muted: false, playing: false, loaded: true } } as never));
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Pause');
+    act(() => store.setState({ session: { shuffle: true, repeatMode: 'off' } } as never));
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Shuffle on');
+    act(() => store.setState({ session: { shuffle: true, repeatMode: 'one' } } as never));
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Repeat this song');
   });
 });

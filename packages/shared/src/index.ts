@@ -26,6 +26,7 @@ export * from './library-ipc.js';
 export * from './browse-ipc.js';
 export * from './track-detail-ipc.js';
 export * from './lyrics-studio-ipc.js';
+export * from './track-edit-ipc.js';
 export * from './playback-ipc.js';
 export * from './collections-ipc.js';
 import type {
@@ -54,6 +55,7 @@ import type {
   ThumbnailDto,
   WallpaperDto,
 } from './collections-ipc.js';
+import type { EditTrackInfoRequest, EditTrackInfoResultDto, ResetTrackInfoResultDto } from './track-edit-ipc.js';
 import type { LyricsSearchRequest, LyricsSearchResultDto, SaveLyricsRequest, SaveLyricsResultDto } from './lyrics-studio-ipc.js';
 import type { ArtworkDto, AttachArtworkResultDto, AttachLyricsResultDto, DetachArtworkResultDto, DetachLyricsResultDto, LyricsDto, TrackRefRequest } from './track-detail-ipc.js';
 import type {
@@ -158,6 +160,10 @@ export interface PlaybackIpcContract {
   'lyrics:search': { request: LyricsSearchRequest; response: IpcResult<LyricsSearchResultDto> };
   /** v0.12.0: saves a finished timed lyrics text beside the song (and in the app). */
   'lyrics:save': { request: SaveLyricsRequest; response: IpcResult<SaveLyricsResultDto> };
+  /** v0.15.0: the listener's own title / artist / album for a song (laid over its tags; the file is never changed). */
+  'track:editInfo': { request: EditTrackInfoRequest; response: IpcResult<EditTrackInfoResultDto> };
+  /** v0.15.0: back to the tags the file itself carries. */
+  'track:resetInfo': { request: TrackRefRequest; response: IpcResult<ResetTrackInfoResultDto> };
 }
 
 export interface PingRequest {
@@ -269,6 +275,8 @@ export const IPC_INVOKE_CHANNELS = [
   'track:detachArtwork',
   'lyrics:search',
   'lyrics:save',
+  'track:editInfo',
+  'track:resetInfo',
   'favorites:list',
   'favorites:ids',
   'favorites:set',

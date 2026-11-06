@@ -5,6 +5,7 @@ import { initialSchemaMigration } from './initial-schema.js';
 import { libraryRootsMigration } from './library-roots-schema.js';
 import { playbackSessionMigration } from './playback-session-schema.js';
 import type { Migration } from './migration-runner.js';
+import { trackEditsMigration } from './track-edits-schema.js';
 import { scanStateMigration } from './scan-state-schema.js';
 
 /**
@@ -19,4 +20,5 @@ export const MIGRATIONS: readonly Migration[] = [
   attachedLyricsMigration,
   collectionsMigration,
   customMediaMigration,
+  trackEditsMigration,
 ];

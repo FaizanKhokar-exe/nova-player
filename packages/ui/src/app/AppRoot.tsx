@@ -5,6 +5,7 @@ import { NowPlayingStoreProvider } from '../nowplaying/NowPlayingStoreProvider.j
 import { PlaybackStoreProvider, usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { CollectionsStoreProvider } from '../collections/CollectionsStoreProvider.js';
 import { ThemeController, ThemeStoreProvider } from '../theme/ThemeProvider.js';
+import { Hud } from './Hud.js';
 import { Dock } from './Dock.js';
 import { NowPlayingScreen } from './NowPlaying.js';
 import { QueueDrawer } from './QueueDrawer.js';
@@ -186,6 +187,9 @@ function AppEffects() {
   // The pointer disappears after a few quiet seconds in Now Playing or fullscreen, and comes back on movement.
   const npOpen = useUi((s) => s.nowPlayingOpen);
   useEffect(() => {
+    document.documentElement.dataset.perf = performance; // lets the stylesheet drop blur and entrances in Low mode
+  }, [performance]);
+  useEffect(() => {
     const root = document.documentElement;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let lastReset = 0;
@@ -258,6 +262,7 @@ export function AppRoot() {
       <ModalLayer />
       <LyricStudio />
       <ToastLayer />
+      <Hud />
       <Tooltips />
     </div>
   );

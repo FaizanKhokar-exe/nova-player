@@ -136,6 +136,8 @@ export interface PlaybackActions {
   livePositionMs(): number;
   /** 0..1. Raising the volume above 0 also un-mutes. */
   setVolume(volume: number): void;
+  /** Asks main for the session again (e.g. after a song's name was corrected) without touching what is playing. */
+  refreshSession(): Promise<void>;
   toggleMute(): void;
   setRepeatMode(mode: RepeatModeDto): Promise<void>;
   cycleRepeatMode(): Promise<void>;
@@ -649,6 +651,14 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
         const whole = Math.round(clamped);
         audio.currentTime = whole / 1000;
         setPosition(whole);
+      },
+
+      async refreshSession() {
+        const fresh = await call('playback:getState', undefined);
+        if (fresh.ok && fresh.value.revision >= lastRevision) {
+          lastRevision = fresh.value.revision;
+          set({ session: fresh.value });
+        }
       },
 
       setVolume(volume) {

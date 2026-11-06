@@ -62,6 +62,19 @@ function translateWriteError(error: unknown): never {
   });
 }
 
+interface EditRow {
+  readonly track_id: string;
+  readonly title: string;
+  readonly artist: string;
+  readonly album: string | null;
+}
+
+/** The track as the listener corrected it (a corrected name counts as a tag, never as a guessed filename). */
+function withEdit(track: Track, edit: EditRow | undefined): Track {
+  if (edit === undefined) return track;
+  return { ...track, title: edit.title, titleSource: 'tag', artist: edit.artist, artistSource: 'tag', album: edit.album ?? undefined };
+}
+
 /**
  * The SQLite implementation of the domain's `TrackRepository` port.
  *
@@ -80,6 +93,9 @@ export class SqliteTrackRepository implements TrackRepository {
   private readonly insertTrack: Database.Statement;
   private readonly updateTrack: Database.Statement;
   private readonly deleteTrack: Database.Statement<[string]>;
+  private editStatements:
+    | { readonly selectAll: Database.Statement<[]>; readonly selectOne: Database.Statement<[string]>; readonly upsert: Database.Statement; readonly remove: Database.Statement<[string]> }
+    | undefined;
 
   constructor(database: NovaDatabase, options: SqliteTrackRepositoryOptions = {}) {
     const db = database.connection;
@@ -92,15 +108,57 @@ export class SqliteTrackRepository implements TrackRepository {
     this.insertTrack = db.prepare(`INSERT INTO tracks (${COLUMN_LIST}) VALUES (${NAMED_PARAMS})`);
     this.updateTrack = db.prepare(`UPDATE tracks SET ${UPDATE_ASSIGNMENTS} WHERE id = @id`);
     this.deleteTrack = db.prepare('DELETE FROM tracks WHERE id = ?');
+
+  }
+
+  /** The statements for the listener's edits, prepared on first use; `undefined` while the schema has no such table. */
+  private edits(): NonNullable<SqliteTrackRepository['editStatements']> | undefined {
+    if (this.editStatements !== undefined) return this.editStatements;
+    try {
+      const db = this.connection;
+      this.editStatements = {
+        selectAll: db.prepare('SELECT track_id, title, artist, album FROM track_edits'),
+        selectOne: db.prepare('SELECT track_id, title, artist, album FROM track_edits WHERE track_id = ?'),
+        upsert: db.prepare(`INSERT INTO track_edits (track_id, title, artist, album, edited_at_ms) VALUES (@id, @title, @artist, @album, @at)
+          ON CONFLICT (track_id) DO UPDATE SET title = excluded.title, artist = excluded.artist, album = excluded.album, edited_at_ms = excluded.edited_at_ms`),
+        remove: db.prepare('DELETE FROM track_edits WHERE track_id = ?'),
+      };
+    } catch {
+      return undefined;
+    }
+    return this.editStatements;
+  }
+
+  private editOf(id: string): EditRow | undefined {
+    return this.edits()?.selectOne.get(id) as EditRow | undefined;
   }
 
   getById(id: TrackId): Track | undefined {
     const row = this.selectById.get(id) as TrackRow | undefined;
-    return row === undefined ? undefined : rowToTrack(row);
+    if (row === undefined) return undefined;
+    return withEdit(rowToTrack(row), this.editOf(id));
   }
 
   list(): readonly Track[] {
-    return (this.selectAll.all() as TrackRow[]).map(rowToTrack);
+    const edits = new Map(((this.edits()?.selectAll.all() ?? []) as EditRow[]).map((e) => [e.track_id, e]));
+    return (this.selectAll.all() as TrackRow[]).map((row) => withEdit(rowToTrack(row), edits.get(row.id)));
+  }
+
+  /** v0.15.0: the listener's own title / artist / album for a track, laid over its tags until reset. Returns false for an unknown track. */
+  setEdit(id: TrackId, edit: { readonly title: string; readonly artist: string; readonly album?: string }, nowMs: number = Date.now()): boolean {
+    const statements = this.edits();
+    if (statements === undefined || (this.selectById.get(id) as TrackRow | undefined) === undefined) return false;
+    statements.upsert.run({ id, title: edit.title, artist: edit.artist, album: edit.album ?? null, at: Math.max(0, Math.round(nowMs)) });
+    return true;
+  }
+
+  /** Back to what the file's own tags say. */
+  clearEdit(id: TrackId): boolean {
+    return (this.edits()?.remove.run(id).changes ?? 0) > 0;
+  }
+
+  hasEdit(id: TrackId): boolean {
+    return this.editOf(id) !== undefined;
   }
 
   insert(record: TrackRecord): void {
@@ -128,7 +186,7 @@ export class SqliteTrackRepository implements TrackRepository {
   }
 
   findByDeduplicationKey(key: DeduplicationKey): readonly Track[] {
-    return (this.selectByDedupKey.all(key) as TrackRow[]).map(rowToTrack);
+    return (this.selectByDedupKey.all(key) as TrackRow[]).map((row) => withEdit(rowToTrack(row), this.editOf(row.id)));
   }
 
   listFileStates(): readonly TrackFileState[] {

@@ -47,6 +47,13 @@ function bandAverage(bins: Uint8Array, binHz: number, fromHz: number, toHz: numb
   return sum / (to - from) / 255;
 }
 
+/** Below this loudest-band reading (0..1 of the analyser range) the track counts as silence: nothing is boosted and nothing beats. */
+const SILENCE = 0.02;
+/** Quietest tracks are lifted at most this much (about +18 dB). */
+const MAX_GAIN = 8;
+/** The peak follower forgets over roughly four seconds at 60 fps. */
+const PEAK_FRAMES = 240;
+
 export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnalyzer {
   const sensitivity = options.sensitivity ?? 1.16;
   const minGapMs = options.minGapMs ?? 125;
@@ -58,6 +65,9 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
   let treble = 0;
   let average = 0;
   let midAverage = 0;
+  let fluxAverage = 0;
+  let peak = 0;
+  let previous = new Uint8Array(0);
   let pulse = 0;
   let lastBeatMs = -Infinity;
   let lastMs: number | undefined;
@@ -65,9 +75,28 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
 
   return {
     analyze(bins, binHz, nowMs) {
-      const rawBass = bandAverage(bins, binHz, 30, 150);
-      const rawMid = bandAverage(bins, binHz, 150, 2_000);
-      const rawTreble = bandAverage(bins, binHz, 2_000, 12_000);
+      // Auto-gain: a quiet or heavily compressed ("phone") recording sits low and flat in the analyser's range, so the
+      // fixed floors below would never be reached. Everything is scaled so the track's own recent peak reads ~0.75 (loud tracks are left alone, never turned down).
+      const loudest = Math.max(bandAverage(bins, binHz, 30, 150), bandAverage(bins, binHz, 150, 2_000), bandAverage(bins, binHz, 2_000, 12_000));
+      if (frames === 0) peak = loudest; // start at this track's level, so the gain does not creep up and fake an onset
+      // The gain comes from the peak BEFORE this frame, so a hit is never shrunk by its own loudness.
+      const gain = peak > SILENCE ? Math.max(1, Math.min(MAX_GAIN, 0.75 / peak)) : 1;
+      peak = loudest > peak ? peak + (loudest - peak) / 4 : peak + (loudest - peak) / PEAK_FRAMES;
+      const rawBass = Math.min(1, bandAverage(bins, binHz, 30, 150) * gain);
+      const rawMid = Math.min(1, bandAverage(bins, binHz, 150, 2_000) * gain);
+      const rawTreble = Math.min(1, bandAverage(bins, binHz, 2_000, 12_000) * gain);
+      // Spectral flux: how much the whole 60 Hz - 6 kHz spectrum rose since the last frame. Works when a speaker-grade
+      // mix has almost no bass (drums then show up as broadband jumps instead).
+      const fluxFrom = Math.max(1, Math.floor(60 / binHz));
+      const fluxTo = Math.min(bins.length, Math.ceil(6_000 / binHz));
+      if (previous.length !== bins.length) previous = new Uint8Array(bins.length);
+      let rise = 0;
+      for (let i = fluxFrom; i < fluxTo; i += 1) {
+        const d = (bins[i] as number) - (previous[i] as number);
+        if (d > 0) rise += d;
+      }
+      previous.set(bins);
+      const rawFlux = Math.min(1, (rise / Math.max(1, fluxTo - fluxFrom) / 255) * gain * 6);
       // Fast attack, slower release: bars jump up with the music and fall back gracefully.
       const ease = (previous: number, next: number): number => (next > previous ? previous + (next - previous) * 0.65 : previous + (next - previous) * 0.18);
       bass = ease(bass, rawBass);
@@ -80,12 +109,13 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
 
       let beat = false;
       // The first frames only teach the average what this track sounds like; nothing can be "above" an average yet.
-      if (frames === 0) { average = rawBass; midAverage = rawMid; }
+      if (frames === 0) { average = rawBass; midAverage = rawMid; fluxAverage = rawFlux; }
       frames += 1;
       // A kick (bass) OR a snare / clap / hi-hat hit (mid band) counts, so busy tracks pulse far more often than a bass-only rule would.
       const kick = rawBass >= floor && rawBass >= average * sensitivity;
       const snare = rawMid >= floor * 1.4 && rawMid >= midAverage * (sensitivity + 0.12);
-      if (frames > 10 && average > 0 && (kick || snare) && nowMs - lastBeatMs >= minGapMs) {
+      const hit = rawFlux >= 0.06 && rawFlux >= fluxAverage * (sensitivity + 0.6);
+      if (frames > 10 && peak > SILENCE && (kick || snare || hit) && nowMs - lastBeatMs >= minGapMs) {
         beat = true;
         lastBeatMs = nowMs;
         pulse = 1;
@@ -93,12 +123,14 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
       // Rises quickly (a new loud passage becomes the reference within a few frames), falls slowly.
       average += (rawBass - average) / (rawBass > average ? 8 : window);
       midAverage += (rawMid - midAverage) / (rawMid > midAverage ? 8 : window);
+      fluxAverage += (rawFlux - fluxAverage) / (rawFlux > fluxAverage ? 8 : window);
 
       const level = Math.min(1, (bass * 1.2 + mid + treble * 0.8) / 3);
       return { bass, mid, treble, level, beat, pulse };
     },
     reset() {
-      bass = mid = treble = average = midAverage = pulse = 0;
+      bass = mid = treble = average = midAverage = fluxAverage = peak = pulse = 0;
+      previous = new Uint8Array(0);
       lastBeatMs = -Infinity;
       lastMs = undefined;
       frames = 0;

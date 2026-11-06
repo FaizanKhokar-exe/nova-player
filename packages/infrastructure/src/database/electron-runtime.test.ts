@@ -33,7 +33,7 @@ function findElectronBinary(): string | undefined {
 }
 
 const electronBinary = findElectronBinary();
-const SOURCES = ['migration-runner', 'initial-schema', 'scan-state-schema', 'library-roots-schema', 'playback-session-schema', 'attached-lyrics-schema', 'collections-schema', 'custom-media-schema', 'migrations', 'open-database'];
+const SOURCES = ['migration-runner', 'initial-schema', 'scan-state-schema', 'library-roots-schema', 'playback-session-schema', 'attached-lyrics-schema', 'collections-schema', 'custom-media-schema', 'track-edits-schema', 'migrations', 'open-database'];
 
 const RUNNER = `
 import { openDatabase } from './open-database.js';

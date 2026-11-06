@@ -11,8 +11,10 @@ import { EQ_BANDS, EQ_PRESETS, clampDb } from '../audio/eq-presets.js';
 export type VisualizerStyle = 'bars' | 'wave' | 'ring';
 export type PerformanceMode = 'auto' | 'high' | 'balanced' | 'low';
 export type LyricsBackdrop = 'particles' | 'aurora' | 'plain';
-/** How the next line arrives: Magnet pulls it up from below with a springy settle; Apple glides the whole list; Karaoke lifts the line and wipes colour across it. */
-export type LyricsAnimation = 'magnet' | 'apple' | 'karaoke';
+/** How the next line arrives: Apple glides the whole list; Karaoke lifts the line and wipes colour across it. (The v0.13 "Magnet" style was removed; a saved "magnet" becomes Apple.) */
+export type LyricsAnimation = 'apple' | 'karaoke';
+/** What happens to lines already sung: dimmed (default), fading away over the next two lines, or gone at once. */
+export type SungLines = 'dim' | 'fade' | 'hide';
 export type LyricsAlign = 'left' | 'center';
 export type LyricsCase = 'normal' | 'upper' | 'lower' | 'small-caps' | 'capitalize';
 export type LyricsFont = 'default' | 'serif' | 'rounded' | 'mono';
@@ -45,6 +47,7 @@ export interface Prefs {
   /** The listener agreed to let Lyric Studio send a song's title/artist to lrclib.net when they press Search. */
   readonly lyricsSearchConsent: boolean;
   readonly lyricsAnimation: LyricsAnimation;
+  readonly sungLines: SungLines;
   readonly lyricsAlign: LyricsAlign;
   readonly lyricsCase: LyricsCase;
   readonly lyricsFont: LyricsFont;
@@ -73,6 +76,7 @@ export interface PrefsActions {
   setLyricsDepthBlur(value: boolean): void;
   setLyricsSearchConsent(value: boolean): void;
   setLyricsAnimation(value: LyricsAnimation): void;
+  setSungLines(value: SungLines): void;
   setLyricsAlign(value: LyricsAlign): void;
   setLyricsCase(value: LyricsCase): void;
   setLyricsFont(value: LyricsFont): void;
@@ -101,7 +105,8 @@ export const DEFAULT_PREFS: Prefs = {
   lyricsBackdrop: 'particles',
   lyricsDepthBlur: true,
   lyricsSearchConsent: false,
-  lyricsAnimation: 'magnet',
+  lyricsAnimation: 'apple',
+  sungLines: 'dim',
   lyricsAlign: 'left',
   lyricsCase: 'normal',
   lyricsFont: 'default',
@@ -158,7 +163,8 @@ function sanitize(raw: unknown): Prefs {
     lyricsBackdrop: oneOf(p.lyricsBackdrop, ['particles', 'aurora', 'plain'], DEFAULT_PREFS.lyricsBackdrop),
     lyricsDepthBlur: typeof p.lyricsDepthBlur === 'boolean' ? p.lyricsDepthBlur : DEFAULT_PREFS.lyricsDepthBlur,
     lyricsSearchConsent: p.lyricsSearchConsent === true,
-    lyricsAnimation: oneOf(p.lyricsAnimation, ['magnet', 'apple', 'karaoke'], DEFAULT_PREFS.lyricsAnimation),
+    lyricsAnimation: oneOf(p.lyricsAnimation, ['apple', 'karaoke'], DEFAULT_PREFS.lyricsAnimation),
+    sungLines: oneOf(p.sungLines, ['dim', 'fade', 'hide'], DEFAULT_PREFS.sungLines),
     lyricsAlign: oneOf(p.lyricsAlign, ['left', 'center'], DEFAULT_PREFS.lyricsAlign),
     lyricsCase: oneOf(p.lyricsCase, ['normal', 'upper', 'lower', 'small-caps', 'capitalize'], DEFAULT_PREFS.lyricsCase),
     lyricsFont: oneOf(p.lyricsFont, ['default', 'serif', 'rounded', 'mono'], DEFAULT_PREFS.lyricsFont),
@@ -201,6 +207,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
     setLyricsDepthBlur: (lyricsDepthBlur) => set({ lyricsDepthBlur }),
     setLyricsSearchConsent: (lyricsSearchConsent) => set({ lyricsSearchConsent }),
     setLyricsAnimation: (lyricsAnimation) => set({ lyricsAnimation }),
+    setSungLines: (sungLines) => set({ sungLines }),
     setLyricsAlign: (lyricsAlign) => set({ lyricsAlign }),
     setLyricsCase: (lyricsCase) => set({ lyricsCase }),
     setLyricsFont: (lyricsFont) => set({ lyricsFont }),
@@ -232,6 +239,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
         lyricsDepthBlur: s.lyricsDepthBlur,
         lyricsSearchConsent: s.lyricsSearchConsent,
         lyricsAnimation: s.lyricsAnimation,
+        sungLines: s.sungLines,
         lyricsAlign: s.lyricsAlign,
         lyricsCase: s.lyricsCase,
         lyricsFont: s.lyricsFont,

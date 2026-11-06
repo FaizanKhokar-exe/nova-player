@@ -1,5 +1,5 @@
 import { HeartButton } from './parts.js';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useStore } from 'zustand';
 import { useNowPlaying } from '../nowplaying/NowPlayingStoreProvider.js';
 import { Artwork } from '../nowplaying/Artwork.js';
@@ -26,13 +26,26 @@ const MODES: ReadonlyArray<{ id: NowPlayingLayout; label: string; icon: IconName
  *  - Visualizer: the cover and a large spectrum.
  * The backdrop is the cover art itself, blurred, so every song gets its own colours.
  */
+/** How long the closing animation runs before the screen is removed (matches `nx-np-out` in the stylesheet; instant under Reduce motion). */
+const EXIT_MS = 260;
+
 export function NowPlayingScreen() {
   const open = useUi((s) => s.nowPlayingOpen);
-  if (!open) return null;
-  return <NowPlayingLayer />;
+  const { theme } = useServices();
+  const reduceMotion = useStore(theme, (s) => s.reduceMotion);
+  // The screen stays mounted while it animates away, so closing glides down instead of vanishing.
+  const [mounted, setMounted] = useState(open);
+  if (open && !mounted) setMounted(true);
+  useEffect(() => {
+    if (open || !mounted) return;
+    const timer = setTimeout(() => setMounted(false), reduceMotion ? 0 : EXIT_MS);
+    return () => clearTimeout(timer);
+  }, [open, mounted, reduceMotion]);
+  if (!open && !mounted) return null;
+  return <NowPlayingLayer closing={!open} />;
 }
 
-function NowPlayingLayer() {
+function NowPlayingLayer({ closing }: { closing: boolean }) {
   const { ui, playback, collections, theme, visuals, audioControls, prefs } = useServices();
   const layout = useUi((s) => s.nowPlayingLayout);
   const root = useRef<HTMLDivElement | null>(null);
@@ -75,7 +88,7 @@ function NowPlayingLayer() {
   const aurora = layout === 'lyrics' && backdrop !== 'plain';
 
   return (
-    <div ref={root} className="nx-np" data-layout={layout} data-testid="now-playing" role="dialog" aria-modal="true" aria-label="Now Playing">
+    <div ref={root} className="nx-np" data-layout={layout} data-closing={closing ? 'true' : undefined} inert={closing || undefined} data-testid="now-playing" role="dialog" aria-modal="true" aria-label="Now Playing">
       <div className="nx-np-bg" aria-hidden="true">
         {artwork.status === 'found' && artwork.dataUrl !== undefined ? (
           <div key={artwork.dataUrl} className="nx-np-art" data-testid="np-backdrop" style={{ backgroundImage: `url("${artwork.dataUrl}")`, animation: 'nx-fade 700ms var(--ease-out)' }} />
@@ -120,6 +133,9 @@ function NowPlayingLayer() {
               <span className="nx-np-title nx-clamp-2 nx-text" dir="auto" data-testid="np-title">{track?.title ?? 'Nothing playing'}</span>
               <span className="nx-np-artist nx-ellipsis nx-text" dir="auto" data-testid="np-artist">{track?.artist ?? ''}</span>
             </div>
+            {track !== undefined && (
+              <button type="button" className="nx-icon-btn" aria-label="Edit song info" data-testid="np-edit-info" onClick={() => ui.getState().openModal({ kind: 'edit-info', track })}><Icon name="edit" size={20} /></button>
+            )}
             {track !== undefined && (
               <HeartButton size={22} favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="np-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
             )}

@@ -2,12 +2,13 @@ import { CUSTOMIZABLE, SHORTCUT_HELP, conflictFor, isAssignableKey, keyLabel, ty
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
-import { EQ_BAND_LABELS, EQ_PRESETS, EQ_MAX_DB, EQ_MIN_DB, matchPreset } from '../../audio/eq-presets.js';
+import { EqualizerPanel } from '../EqualizerPanel.js';
 import { baseName, plural } from '../../library/format.js';
 import { useLibraryStore } from '../../library/LibraryStoreProvider.js';
-import { SPEEDS, WALLPAPER_BLUR_RANGE, WALLPAPER_DIM_RANGE, type PerformanceMode, type VisualizerStyle, type LyricsBackdrop, type LyricsAnimation, type LyricsAlign, type LyricsCase, type LyricsFont, type BeatIntensity } from '../../prefs/prefs-store.js';
+import { SPEEDS, WALLPAPER_BLUR_RANGE, WALLPAPER_DIM_RANGE, type PerformanceMode, type VisualizerStyle, type LyricsBackdrop, type LyricsAnimation, type SungLines, type LyricsAlign, type LyricsCase, type LyricsFont, type BeatIntensity } from '../../prefs/prefs-store.js';
 import { Icon } from '../../theme/Icon.js';
 import { LYRICS_SIZE_RANGE, SWATCHES } from '../../theme/theme-store.js';
+import type { MoodMode } from '../../theme/mood.js';
 import { useCollections } from '../../collections/CollectionsStoreProvider.js';
 import { useActions, addFolderAndScan } from '../actions.js';
 import { usePrefs, useServices } from '../services.js';
@@ -91,6 +92,7 @@ export function SettingsView() {
   const customColor = useStore(theme, (s) => s.customColor);
   const reduceMotion = useStore(theme, (s) => s.reduceMotion);
   const lyricsSize = useStore(theme, (s) => s.lyricsSize);
+  const mood = useStore(theme, (s) => s.mood);
   const p = usePrefs((s) => s);
   const wallpaper = useStore(wallpaperStore, (s) => s.wallpaper);
   const wallpaperBusy = useStore(wallpaperStore, (s) => s.busy);
@@ -100,7 +102,6 @@ export function SettingsView() {
   const lastScan = useLibraryStore((s) => s.scan.last);
   const watching = useLibraryStore((s) => s.watcher.status);
   const historyCount = useCollections((s) => s.history.items.length);
-  const preset = matchPreset(p.eqGains);
   const hasWallpaper = wallpaper?.status === 'set';
 
   return (
@@ -111,6 +112,9 @@ export function SettingsView() {
         <h2 className="nx-h2" id="set-appearance">Appearance</h2>
         <Setting title="Theme" hint="Dark is easiest on the eyes at night; Light suits a bright room.">
           <Chips label="Theme" value={mode} options={[{ id: 'dark', label: 'Dark' }, { id: 'light', label: 'Light' }]} onChange={(value) => theme.getState().setMode(value)} />
+        </Setting>
+        <Setting title="Mood theme" hint="How far the cover's colour reaches into the app. Off: only the accent. Tinted: quiet tint on backgrounds and panels. Immersive: deep colour everywhere. Text stays readable on every cover.">
+          <Chips<MoodMode> label="Mood theme" value={mood} options={[{ id: 'off', label: 'Off' }, { id: 'tinted', label: 'Tinted' }, { id: 'immersive', label: 'Immersive' }]} onChange={(value) => theme.getState().setMood(value)} />
         </Setting>
         <Setting title="Accent colour" hint="Dynamic follows the cover art of the song that is playing.">
           <div className="nx-swatches" role="group" aria-label="Accent colour">
@@ -169,24 +173,8 @@ export function SettingsView() {
 
       <section className="nx-card" aria-labelledby="set-audio" data-testid="audio-settings">
         <h2 className="nx-h2" id="set-audio">Audio</h2>
-        <Setting title="Equalizer" hint="Ten bands. Boosts are balanced automatically so loud songs never distort.">
-          <Switch label="Equalizer" checked={p.eqEnabled} onChange={(value) => prefs.getState().setEqEnabled(value)} />
-        </Setting>
-        <div className="nx-chips" role="group" aria-label="Equalizer presets">
-          {EQ_PRESETS.map((item) => (
-            <button key={item.id} type="button" className="nx-pill" aria-pressed={preset === item.id} onClick={() => { prefs.getState().setEqGains(item.gains); prefs.getState().setEqEnabled(item.id !== 'flat' || p.eqEnabled); }}>{item.label}</button>
-          ))}
-          {preset === 'custom' && <span className="nx-pill" aria-pressed="true">Custom</span>}
-        </div>
-        <div className="nx-eq" role="group" aria-label="Equalizer bands" style={{ opacity: p.eqEnabled ? 1 : 0.5 }}>
-          {EQ_BAND_LABELS.map((label, index) => (
-            <div key={label} className="nx-eq-band">
-              <output>{(p.eqGains[index] as number) > 0 ? '+' : ''}{p.eqGains[index]}</output>
-              <input type="range" min={EQ_MIN_DB} max={EQ_MAX_DB} step={0.5} value={p.eqGains[index] as number} aria-label={`${label} Hz`} data-testid={`eq-band-${index}`} onChange={(event) => { prefs.getState().setEqBand(index, Number(event.currentTarget.value)); prefs.getState().setEqEnabled(true); }} />
-              <span>{label}</span>
-            </div>
-          ))}
-        </div>
+        <h3 className="nx-h3" style={{ margin: '4px 0 8px' }}>Equalizer</h3>
+        <EqualizerPanel />
         <Setting title="Playback speed" hint="Pitch stays natural.">
           <Chips label="Playback speed" value={String(p.speed)} options={SPEEDS.map((s) => ({ id: String(s), label: s === 1 ? 'Normal' : `${s}×` }))} onChange={(value) => prefs.getState().setSpeed(Number(value))} />
         </Setting>
@@ -202,8 +190,11 @@ export function SettingsView() {
           <Chips<LyricsBackdrop> label="Lyrics Mode backdrop" value={p.lyricsBackdrop} options={[{ id: 'particles', label: 'Particles' }, { id: 'aurora', label: 'Aurora glow' }, { id: 'plain', label: 'Still' }]} onChange={(value) => prefs.getState().setLyricsBackdrop(value)} />
         </Setting>
         <Setting title="Blur lines not being sung" hint="Soft depth effect on the surrounding lyrics."><Switch label="Blur lines not being sung" checked={p.lyricsDepthBlur} onChange={(value) => prefs.getState().setLyricsDepthBlur(value)} /></Setting>
-        <Setting title="Line animation" hint="How the next line arrives. Magnet pulls it up with a springy settle; Apple glides; Karaoke lifts and wipes colour.">
-          <Chips<LyricsAnimation> label="Line animation" value={p.lyricsAnimation} onChange={(v) => prefs.getState().setLyricsAnimation(v)} options={[{ id: 'magnet', label: 'Magnet' }, { id: 'apple', label: 'Apple' }, { id: 'karaoke', label: 'Karaoke' }]} />
+        <Setting title="Line animation" hint="How the next line arrives. Apple glides; Karaoke lifts and wipes colour.">
+          <Chips<LyricsAnimation> label="Line animation" value={p.lyricsAnimation} onChange={(v) => prefs.getState().setLyricsAnimation(v)} options={[{ id: 'apple', label: 'Apple' }, { id: 'karaoke', label: 'Karaoke' }]} />
+        </Setting>
+        <Setting title="Sung lines" hint="What happens to lines already sung. Dim keeps them faint above; Fade lets them melt away over two lines; Hide removes them at once.">
+          <Chips<SungLines> label="Sung lines" value={p.sungLines} onChange={(v) => prefs.getState().setSungLines(v)} options={[{ id: 'dim', label: 'Dim' }, { id: 'fade', label: 'Fade away' }, { id: 'hide', label: 'Hide' }]} />
         </Setting>
         <Setting title="Alignment"><Chips<LyricsAlign> label="Lyrics alignment" value={p.lyricsAlign} onChange={(v) => prefs.getState().setLyricsAlign(v)} options={[{ id: 'left', label: 'Left' }, { id: 'center', label: 'Centre' }]} /></Setting>
         <Setting title="Letter case" hint="Capitals or small text, whatever you like.">

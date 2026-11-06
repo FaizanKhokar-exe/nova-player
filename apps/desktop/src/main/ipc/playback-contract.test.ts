@@ -35,6 +35,9 @@ describe('the playback IPC contract', () => {
       'track:detachLyrics',
       'track:attachArtwork',
       'track:detachArtwork',
+      // v0.15.0: correct a song's name by hand, and put it back
+      'track:editInfo',
+      'track:resetInfo',
       // Phase 11: play a whole list (favourites / history / playlist) and cover thumbnails
       'playback:playList',
       'track:getThumbnail',

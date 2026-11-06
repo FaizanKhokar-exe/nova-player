@@ -515,3 +515,34 @@ describe('Phase 8: removeUnreadableRecords', () => {
     }
   });
 });
+
+describe('names corrected by the listener (v0.15.0)', () => {
+  it('lays an edit over the tags in every read, survives a rescan, and can be reset', () => {
+    const record = makeRecord();
+    repo.insert(record);
+    const real = repo as SqliteTrackRepository;
+    expect(real.hasEdit(record.track.id)).toBe(false);
+    expect(real.setEdit(record.track.id, { title: 'Right Title', artist: 'Right Artist', album: 'Right Album' })).toBe(true);
+    for (const track of [repo.getById(record.track.id), repo.list()[0], repo.findByDeduplicationKey(computeDeduplicationKey({ title: record.track.title, artist: record.track.artist, sizeBytes: record.sizeBytes }))[0]]) {
+      expect(track).toMatchObject({ title: 'Right Title', artist: 'Right Artist', album: 'Right Album', titleSource: 'tag', artistSource: 'tag' });
+    }
+    // the scanner rewrites the tag columns when the file changes - the edit stays
+    repo.update({ ...record, track: { ...record.track, title: 'Scanned again' } });
+    expect(repo.getById(record.track.id)?.title).toBe('Right Title');
+    // changing it again replaces it (no album = no album)
+    real.setEdit(record.track.id, { title: 'T2', artist: 'A2' });
+    expect(repo.getById(record.track.id)).toMatchObject({ title: 'T2', artist: 'A2', album: undefined });
+    expect(real.clearEdit(record.track.id)).toBe(true);
+    expect(repo.getById(record.track.id)?.title).toBe('Scanned again');
+    expect(real.clearEdit(record.track.id)).toBe(false);
+  });
+  it('refuses an unknown track and goes away with its track', () => {
+    const real = repo as SqliteTrackRepository;
+    const record = makeRecord();
+    expect(real.setEdit(record.track.id, { title: 'x', artist: 'y' })).toBe(false);
+    repo.insert(record);
+    real.setEdit(record.track.id, { title: 'x', artist: 'y' });
+    repo.delete(record.track.id);
+    expect((db.connection.prepare('SELECT COUNT(*) AS n FROM track_edits').get() as { n: number }).n).toBe(0);
+  });
+});

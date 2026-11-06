@@ -44,6 +44,33 @@ describe('beat analyzer', () => {
     expect(after.pulse).toBe(0);
     expect(after.beat).toBe(false);
   });
+  it('still pulses on a quiet recording (same hits ~30 dB lower)', () => {
+    const analyzer = createBeatAnalyzer();
+    let now = 0;
+    for (let i = 0; i < 80; i += 1) analyzer.analyze(frame(18), 43, (now += 16));
+    let hits = 0;
+    for (let k = 0; k < 4; k += 1) {
+      if (analyzer.analyze(frame(60), 43, (now += 16)).beat) hits += 1;
+      for (let i = 0; i < 30; i += 1) analyzer.analyze(frame(18), 43, (now += 16));
+    }
+    expect(hits).toBeGreaterThanOrEqual(3);
+  });
+  it('pulses on drums even when there is no bass at all (phone-speaker style mix)', () => {
+    const analyzer = createBeatAnalyzer();
+    const mids = (level: number): Uint8Array => {
+      const bins = new Uint8Array(512);
+      for (let i = 0; i < 512; i += 1) bins[i] = i * 43 >= 300 && i * 43 < 5000 ? level : 2;
+      return bins;
+    };
+    let now = 0;
+    for (let i = 0; i < 80; i += 1) analyzer.analyze(mids(40), 43, (now += 16));
+    let hits = 0;
+    for (let k = 0; k < 4; k += 1) {
+      if (analyzer.analyze(mids(150), 43, (now += 16)).beat) hits += 1;
+      for (let i = 0; i < 30; i += 1) analyzer.analyze(mids(40), 43, (now += 16));
+    }
+    expect(hits).toBeGreaterThanOrEqual(3);
+  });
   it('splits energy into bass / mid / treble', () => {
     const analyzer = createBeatAnalyzer();
     const bins = new Uint8Array(512);
@@ -154,5 +181,29 @@ describe('audio engine', () => {
     expect(errors).toHaveLength(1); // not retried every frame
     expect(broken.readFrequencies(into)).toBe(false);
     expect(() => broken.setGains([1])).not.toThrow();
+  });
+});
+
+describe('beat analyzer on phonk-style tracks (huge steady 808 bass, cowbell on the off-beats)', () => {
+  const phonk = (cowbell: boolean): Uint8Array => {
+    const bins = new Uint8Array(512);
+    for (let i = 0; i < 512; i += 1) {
+      const hz = i * 43;
+      bins[i] = hz < 150 ? 235 : hz < 2000 ? (cowbell && hz >= 600 && hz < 1100 ? 200 : 110) : 40; // the bass never lets go; only the cowbell band comes and goes
+    }
+    return bins;
+  };
+  it('still marks most cowbell hits although the bass never dips', () => {
+    const analyzer = createBeatAnalyzer();
+    let now = 0;
+    for (let i = 0; i < 120; i += 1) analyzer.analyze(phonk(false), 43, (now += 16));
+    let hits = 0;
+    const hitCount = 10;
+    for (let k = 0; k < hitCount; k += 1) {
+      if (analyzer.analyze(phonk(true), 43, (now += 16)).beat) hits += 1;
+      for (let i = 0; i < 2; i += 1) analyzer.analyze(phonk(true), 43, (now += 16));
+      for (let i = 0; i < 12; i += 1) analyzer.analyze(phonk(false), 43, (now += 16));
+    }
+    expect(hits).toBeGreaterThanOrEqual(7);
   });
 });

@@ -48,7 +48,7 @@ describe('IPC contract types', () => {
   it('the bridge is invoke + subscribe, and subscribe is typed per event', () => {
     expectTypeOf<keyof NovaBridge>().toEqualTypeOf<'invoke' | 'subscribe'>();
     expectTypeOf<IpcEventContract['library:scanProgress']>().toEqualTypeOf<ScanProgressDto>();
-    expectTypeOf<IpcEventContract['library:changed']>().toEqualTypeOf<{ readonly reason: 'scan' | 'watcher' | 'root-added' | 'root-removed' }>();
+    expectTypeOf<IpcEventContract['library:changed']>().toEqualTypeOf<{ readonly reason: 'scan' | 'watcher' | 'root-added' | 'root-removed' | 'tags-edited' }>();
     expectTypeOf<keyof IpcEventContract>().toEqualTypeOf<
       'library:scanProgress' | 'library:scanFinished' | 'library:changed' | 'library:watcherStatus' | 'playback:stateChanged' | 'shell:command'
     >();

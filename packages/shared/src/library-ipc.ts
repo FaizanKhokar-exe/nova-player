@@ -267,7 +267,7 @@ export interface SearchTracksResponse {
  * Events (main -> renderer)
  * ------------------------------------------------------------------ */
 
-export type LibraryChangeReasonDto = 'scan' | 'watcher' | 'root-added' | 'root-removed';
+export type LibraryChangeReasonDto = 'scan' | 'watcher' | 'root-added' | 'root-removed' | 'tags-edited';
 
 export interface LibraryChangedEvent {
   /** Something changed that makes a previously fetched track or root list stale. */

@@ -95,6 +95,7 @@ export function createActions(services: AppServices): Actions {
         { kind: 'item', id: 'queue', label: 'Add to queue', icon: 'addQueue', run: () => actions.addToQueue(track.id, track.title) },
         { kind: 'sep' },
         { kind: 'item', id: 'fav', label: favorite ? 'Remove from Favorites' : 'Add to Favorites', icon: 'heart', run: () => void state.collections().toggleFavorite(track.id) },
+        { kind: 'item', id: 'edit-info', label: 'Edit song info…', icon: 'edit', run: () => state.ui().openModal({ kind: 'edit-info', track }) },
         { kind: 'submenu', id: 'playlist', label: 'Add to playlist', icon: 'playlist', build: () => playlistSubmenu([track.id]) },
       ];
       if (options.playlist !== undefined) {

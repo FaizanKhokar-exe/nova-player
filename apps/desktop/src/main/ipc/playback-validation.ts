@@ -10,7 +10,7 @@ import type {
   SetRepeatModeRequest,
   SetShuffleRequest,
   TrackFinishedRequest,
-  LyricsSearchRequest,
+  EditTrackInfoRequest, LyricsSearchRequest,
   SaveLyricsRequest,
 } from '@nova/shared';
 import { validateGroupRef } from './browse-validation.js';
@@ -143,4 +143,19 @@ export function validateSaveLyrics(raw: unknown): SaveLyricsRequest {
   const lrc = record.lrc;
   if (typeof lrc !== 'string' || lrc.length > MAX_LRC_CHARS) throw new InvalidRequestError('"lrc" must be text of at most 1 MiB.');
   return { trackId: trackIdField(record, 'trackId'), lrc };
+}
+
+export const MAX_NAME_CHARS = 200;
+
+/** `track:editInfo`: a track id and the corrected names (trimmed, single-spaced; title and artist may not end up empty). */
+export function validateEditTrackInfo(raw: unknown): EditTrackInfoRequest {
+  const record = objectOf(raw, 'a "trackId", "title" and "artist"');
+  rejectUnknownKeys(record, ['trackId', 'title', 'artist', 'album']);
+  const clean = (key: string, value: unknown, required: boolean): string => {
+    if (value === undefined && !required) return '';
+    if (typeof value !== 'string' || value.length > MAX_NAME_CHARS * 2) throw new InvalidRequestError(`"${key}" must be text of at most ${MAX_NAME_CHARS} characters.`);
+    return value.replace(/\s+/g, ' ').trim().slice(0, MAX_NAME_CHARS);
+  };
+  const album = clean('album', record.album, false);
+  return { trackId: trackIdField(record, 'trackId'), title: clean('title', record.title, true), artist: clean('artist', record.artist, true), ...(album !== '' && { album }) };
 }

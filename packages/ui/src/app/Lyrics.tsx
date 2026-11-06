@@ -5,6 +5,8 @@ import { useNowPlaying, useNowPlayingStoreApi } from '../nowplaying/NowPlayingSt
 import { usePlaybackPositionSelector, usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
 import { Icon } from '../theme/Icon.js';
 import { usePrefs, useServices } from './services.js';
+import { isRtlText } from './rtl.js';
+import type { SungLines } from '../prefs/prefs-store.js';
 
 /** How much each line fades, blurs and shrinks with its distance from the line being sung (Apple-style depth). */
 const OPACITY = [1, 0.62, 0.46, 0.34, 0.26, 0.2];
@@ -16,15 +18,12 @@ export function singDurationMs(text: string, gapMs: number): number {
   return Math.max(400, Math.min(estimate, gapMs * 0.94));
 }
 
-/** Springy ease with a small overshoot: the line is "pulled" into place and settles. */
-export const easeOutBack = (x: number): number => {
-  const c1 = 1.1;
-  const c3 = c1 + 1;
-  return 1 + c3 * Math.pow(x - 1, 3) + c1 * Math.pow(x - 1, 2);
-};
-
-const Line = memo(function Line({ line, index, distance, active, depthBlur, singMs, magnet, onSeek }: { line: LyricLineDto; index: number; distance: number; active: boolean; depthBlur: boolean; singMs: number; magnet: boolean; onSeek: (line: LyricLineDto) => void }) {
+const Line = memo(function Line({ line, index, distance, active, depthBlur, singMs, sung, reveal, onSeek }: { line: LyricLineDto; index: number; distance: number; active: boolean; depthBlur: boolean; singMs: number; sung: SungLines; reveal: boolean; onSeek: (line: LyricLineDto) => void }) {
   const step = Math.min(Math.abs(distance), OPACITY.length - 1);
+  // Lines already sung: dim (normal), fade away over two lines, or vanish. While the listener scrolls by hand (`reveal`) everything shows.
+  const rtl = isRtlText(line.text);
+  const gone = !reveal && distance < 0 && (sung === 'hide' || (sung === 'fade' && distance < -2));
+  const fading = !reveal && distance < 0 && sung === 'fade' && distance >= -2;
   return (
     <button
       type="button"
@@ -36,17 +35,19 @@ const Line = memo(function Line({ line, index, distance, active, depthBlur, sing
       data-time-ms={line.timeMs}
       data-sing-ms={Math.round(singMs)}
       aria-current={active ? 'true' : undefined}
+      data-gone={gone ? 'true' : undefined}
+      dir={rtl ? 'rtl' : 'ltr'}
+      data-rtl={rtl ? 'true' : undefined}
+      tabIndex={gone ? -1 : undefined}
       title="Play from here"
       onClick={() => onSeek(line)}
       style={{
-        ['--lyric-opacity' as string]: active ? 1 : OPACITY[step],
+        ['--lyric-opacity' as string]: active ? 1 : gone ? 0 : fading ? (distance === -1 ? 0.2 : 0.07) : OPACITY[step],
         ['--lyric-blur' as string]: `${active || !depthBlur ? 0 : BLUR[step]}px`,
         ['--lyric-scale' as string]: active ? 1 : 0.96,
-        // Magnet: lines already sung are drawn up and away; the next ones wait just below, ready to be pulled in.
-        ['--lyric-ty' as string]: magnet && !active ? `${distance < 0 ? -Math.min(Math.abs(distance), 3) * 5 : Math.min(distance, 3) * 4}px` : '0px',
       }}
     >
-      {line.text === '' ? <span aria-label="Instrumental break">♪ ♪ ♪</span> : <span className={active ? 'nx-lyric-fill nx-text' : 'nx-text'} dir="auto">{line.text}</span>}
+      {line.text === '' ? <span aria-label="Instrumental break">♪ ♪ ♪</span> : <span className={active ? 'nx-lyric-fill nx-text' : 'nx-text'} dir="auto" lang={rtl ? 'ur' : undefined}>{line.text}</span>}
     </button>
   );
 });
@@ -67,19 +68,16 @@ export function Lyrics() {
   const seekMs = usePlaybackStore((s) => s.seekMs);
   const depthBlur = usePrefs((s) => s.lyricsDepthBlur);
   const animation = usePrefs((s) => s.lyricsAnimation);
+  const sung = usePrefs((s) => s.sungLines);
   const align = usePrefs((s) => s.lyricsAlign);
   const textCase = usePrefs((s) => s.lyricsCase);
   const font = usePrefs((s) => s.lyricsFont);
-  const tween = useRef<number>(0);
   const speed = usePrefs((s) => s.speed);
   const lines = lyrics.lines;
   const activeIndex = usePlaybackPositionSelector((positionMs) => activeLyricIndex(lines, positionMs) ?? -1);
 
   const scroller = useRef<HTMLDivElement | null>(null);
-  const animationRef = useRef(animation);
-  useEffect(() => {
-    animationRef.current = animation;
-  }, [animation]);
+
   const [detachedFor, setDetachedFor] = useState<string | undefined>(undefined);
   const detachTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const detached = detachedFor !== undefined && detachedFor === trackId;
@@ -90,20 +88,6 @@ export function Lyrics() {
     const row = container.querySelector<HTMLElement>(`[data-index="${index}"]`);
     if (row === null || typeof container.scrollTo !== 'function') return;
     const top = row.offsetTop - container.clientHeight * 0.38 + row.offsetHeight / 2;
-    cancelAnimationFrame(tween.current);
-    if (behavior === 'smooth' && animationRef.current === 'magnet' && document.documentElement.dataset['reduceMotion'] !== 'true') {
-      // Magnet: the next line is drawn up to the reading spot with a springy settle (a little overshoot, then rest).
-      const from = container.scrollTop;
-      const started = performance.now();
-      const duration = 640;
-      const step = (nowMs: number): void => {
-        const t = Math.min(1, (nowMs - started) / duration);
-        container.scrollTop = from + (top - from) * easeOutBack(t);
-        if (t < 1) tween.current = requestAnimationFrame(step);
-      };
-      tween.current = requestAnimationFrame(step);
-      return;
-    }
     container.scrollTo({ top, behavior });
   }, []);
 
@@ -171,7 +155,7 @@ export function Lyrics() {
     body = (
       <div key={trackId} ref={scroller} className="nx-lyrics" role="list" aria-label="Lyrics" data-testid="lyrics-list" onWheel={detach} onTouchMove={detach}>
         {lines.map((line, index) => (
-          <Line key={`${index}-${line.timeMs}`} line={line} index={index} distance={activeIndex < 0 ? index + 1 : index - activeIndex} active={index === activeIndex} depthBlur={depthBlur} magnet={animation === 'magnet'} singMs={singDurationMs(line.text, (lines[index + 1]?.timeMs ?? line.timeMs + 6_000) - line.timeMs)} onSeek={onSeek} />
+          <Line key={`${index}-${line.timeMs}`} line={line} index={index} distance={activeIndex < 0 ? index + 1 : index - activeIndex} active={index === activeIndex} depthBlur={depthBlur} sung={sung} reveal={detached} singMs={singDurationMs(line.text, (lines[index + 1]?.timeMs ?? line.timeMs + 6_000) - line.timeMs)} onSeek={onSeek} />
         ))}
       </div>
     );

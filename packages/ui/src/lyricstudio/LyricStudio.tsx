@@ -196,9 +196,12 @@ function TimingStep() {
   const failed = useStudio((s) => s.analysisFailed);
   const calibrationNote = useStudio((s) => s.calibrationNote);
   const canUndo = useStudio((s) => s.canUndo);
+  const singStart = useStudio((s) => s.singStartMs);
+  const singEnd = useStudio((s) => s.singEndMs);
   const save = useStudio((s) => s.save);
   const playing = usePlaybackStore((s) => s.engine.playing);
   const [currentIndex, setCurrentIndex] = useState(-1);
+  const [draft, setDraft] = useState('');
   const list = useRef<HTMLUListElement | null>(null);
   const api = studio.getState();
 
@@ -244,6 +247,19 @@ function TimingStep() {
         </span>
         <span className="nx-studio-spacer" />
         <button type="button" className="nx-btn nx-btn--primary" disabled={save.status === 'saving'} data-testid="studio-save" onClick={() => void api.saveLrc()}><Icon name="upload" size={15} /> {save.status === 'saving' ? 'Saving…' : 'Save lyrics'}</button>
+      </div>
+      <div className="nx-studio-window" data-testid="studio-window" role="group" aria-label="Where the singing starts and ends">
+        <span className="nx-muted">Timing off? Tell it where the voice is:</span>
+        <button type="button" className="nx-btn" data-testid="studio-sing-start" data-tip="Play to where the first line is sung, then press this" onClick={() => api.markSinging('start')}>Singing starts here{singStart !== undefined ? ` · ${formatLrcTime(singStart)}` : ''}</button>
+        <button type="button" className="nx-btn" data-testid="studio-sing-end" data-tip="Play to the end of the last sung line, then press this" onClick={() => api.markSinging('end')}>Singing ends here{singEnd !== undefined ? ` · ${formatLrcTime(singEnd)}` : ''}</button>
+        {(singStart !== undefined || singEnd !== undefined) && <button type="button" className="nx-btn" data-testid="studio-sing-clear" onClick={() => api.markSinging('clear')}>Clear</button>}
+      </div>
+      <div className="nx-studio-linetools" data-testid="studio-linetools" role="group" aria-label="Add, change or remove a line">
+        <input className="nx-input" value={draft} dir="auto" placeholder={`Type words for a line, then add it around line ${selected + 1}…`} data-testid="studio-line-input" onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && draft.trim() !== '') { e.preventDefault(); api.insertLine(selected, draft); setDraft(''); } }} />
+        <button type="button" className="nx-btn" disabled={draft.trim() === ''} data-testid="studio-add-after" onClick={() => { api.insertLine(selected, draft); setDraft(''); }}><Icon name="plus" size={14} /> Add after {selected + 1}</button>
+        <button type="button" className="nx-btn" disabled={draft.trim() === ''} data-testid="studio-add-before" onClick={() => { api.insertLine(selected - 1, draft); setDraft(''); }}>Add before {selected + 1}</button>
+        <button type="button" className="nx-btn" disabled={draft.trim() === ''} data-testid="studio-replace" data-tip="Use these words for the selected line (its time stays)" onClick={() => { api.editLine(selected, draft); setDraft(''); }}>Replace words</button>
+        <button type="button" className="nx-btn" disabled={lines.length <= 1} data-testid="studio-remove" onClick={() => api.removeLine(selected)}><Icon name="trash" size={14} /> Remove line {selected + 1}</button>
       </div>
       <p className="nx-studio-keys">
         <kbd>Space</kbd> play/pause · <kbd>Enter</kbd> stamp the selected line as it begins · <kbd>↑</kbd><kbd>↓</kbd> select · <kbd>←</kbd><kbd>→</kbd> nudge 0.1 s (<kbd>Shift</kbd> 0.5 s) · <kbd>A</kbd> hear it · <kbd>L</kbd> lock · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo

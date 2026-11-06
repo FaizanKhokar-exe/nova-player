@@ -47,6 +47,8 @@ export interface LibraryServicesOptions {
 export interface LibraryServices {
   readonly databasePath: string;
   readonly trackRepository: TrackRepository;
+  /** v0.15.0: the listener's corrected names (the same repository, seen through its edit methods). */
+  readonly trackEdits: Pick<SqliteTrackRepository, 'setEdit' | 'clearEdit' | 'hasEdit'>;
   /** The folders the user has added to the library (Phase 3). */
   readonly libraryRootRepository: LibraryRootRepository;
   /** The one saved playback session (Phase 4). */
@@ -122,6 +124,7 @@ export function createLibraryServices(options: LibraryServicesOptions): LibraryS
     return {
       databasePath: options.databasePath,
       trackRepository,
+      trackEdits: trackRepository,
       libraryRootRepository,
       playbackSessionRepository,
       attachedLyricsRepository,

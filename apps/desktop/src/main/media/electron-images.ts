@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { nativeImage } from 'electron';
+import { findContentRect } from './trim-borders.js';
 import { planThumbnail, type ImageResizer, type WallpaperPorts } from '@nova/infrastructure';
 
 /**
@@ -9,12 +10,30 @@ import { planThumbnail, type ImageResizer, type WallpaperPorts } from '@nova/inf
  * for these through small ports, so its rules are tested without a window. `nativeImage` decodes PNG and JPEG.
  */
 
+/** The picture without solid bars around it (see `findContentRect`); the same image when there are none. */
+export function withoutBars(image: Electron.NativeImage): Electron.NativeImage {
+  const { width, height } = image.getSize();
+  const rect = findContentRect({ data: image.toBitmap(), width, height });
+  return rect.width === width && rect.height === height ? image : image.crop(rect);
+}
+
+/** Cover for the big Now Playing picture: bars removed, re-encoded as high-quality JPEG. `undefined` when there was nothing to trim. */
+export function trimCoverBars(bytes: Uint8Array): Uint8Array | undefined {
+  const image = nativeImage.createFromBuffer(Buffer.from(bytes));
+  if (image.isEmpty()) return undefined;
+  const trimmed = withoutBars(image);
+  if (trimmed === image) return undefined;
+  const jpeg = trimmed.toJPEG(92);
+  return jpeg.length === 0 ? undefined : jpeg;
+}
+
 /** Cover thumbnails: crop/scale with `nativeImage`, JPEG out. `undefined` for anything that does not decode. */
 export function createNativeImageResizer(): ImageResizer {
   return {
     async thumbnail(bytes, spec) {
-      const image = nativeImage.createFromBuffer(Buffer.from(bytes));
-      if (image.isEmpty()) return undefined;
+      const decoded = nativeImage.createFromBuffer(Buffer.from(bytes));
+      if (decoded.isEmpty()) return undefined;
+      const image = withoutBars(decoded);
       const { width, height } = image.getSize();
       if (width < 1 || height < 1) return undefined;
       const plan = planThumbnail(width, height, spec);

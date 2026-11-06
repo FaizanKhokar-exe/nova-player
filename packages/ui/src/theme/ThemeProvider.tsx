@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from 're
 import { useStore } from 'zustand';
 import { createStore } from 'zustand/vanilla';
 import { useNowPlayingStoreApi } from '../nowplaying/NowPlayingStoreProvider.js';
+import { MOOD_PROPERTY_NAMES, moodProperties, type MoodMode } from './mood.js';
 import { accentsFromDataUrl, DEFAULT_ACCENTS, type Accents, type Rgb } from './palette.js';
 import { fixedAccents, type ThemeState, type ThemeStoreApi } from './theme-store.js';
 
@@ -30,12 +31,22 @@ const set = (name: string, c: Rgb) => {
   root.style.setProperty(`--accent-${name}`, `rgb(${c.r}, ${c.g}, ${c.b})`);
   root.style.setProperty(`--accent-${name}-rgb`, `${c.r}, ${c.g}, ${c.b}`);
 };
+let activeMood: { mood: MoodMode; theme: 'dark' | 'light' } = { mood: 'tinted', theme: 'dark' };
 const apply = (a: Accents) => {
   set('primary', a.primary);
   set('secondary', a.secondary);
   set('highlight', a.highlight);
   const deep = mix(a.primary, { r: 8, g: 10, b: 20 }, 0.78);
-  document.documentElement.style.setProperty('--accent-deep-rgb', `${deep.r}, ${deep.g}, ${deep.b}`);
+  const root = document.documentElement;
+  root.style.setProperty('--accent-deep-rgb', `${deep.r}, ${deep.g}, ${deep.b}`);
+  // Mood: surfaces take the cover's hue (or are released back to the stylesheet when off).
+  const props = moodProperties(a, activeMood.mood, activeMood.theme);
+  for (const name of MOOD_PROPERTY_NAMES) {
+    const value = props[name];
+    if (value === undefined) root.style.removeProperty(name);
+    else root.style.setProperty(name, value);
+  }
+  root.dataset['mood'] = activeMood.mood;
 };
 const mix = (a: Rgb, b: Rgb, t: number): Rgb => ({ r: Math.round(a.r + (b.r - a.r) * t), g: Math.round(a.g + (b.g - a.g) * t), b: Math.round(a.b + (b.b - a.b) * t) });
 const mixAccents = (a: Accents, b: Accents, t: number): Accents => ({ primary: mix(a.primary, b.primary, t), secondary: mix(a.secondary, b.secondary, t), highlight: mix(a.highlight, b.highlight, t) });
@@ -80,6 +91,7 @@ export function ThemeController() {
       const theme = store.getState();
       const root = document.documentElement;
       root.dataset['theme'] = theme.mode;
+      activeMood = { mood: theme.mood, theme: theme.mode };
       root.dataset['reduceMotion'] = theme.reduceMotion ? 'true' : 'false';
       root.style.setProperty('--lyric-size', `${theme.lyricsSize}px`);
       const fixed = fixedAccents(theme);

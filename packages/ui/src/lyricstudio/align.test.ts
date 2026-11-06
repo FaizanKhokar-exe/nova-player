@@ -80,3 +80,36 @@ describe('alignLines on a synthetic song', () => {
     expect(many.startsMs.every((v, k) => k === 0 || v >= (many.startsMs[k - 1] ?? 0))).toBe(true);
   });
 });
+
+describe('help from the listener and from stereo', () => {
+  it('uses "singing starts / ends here" instead of mistaking an instrumental intro for the voice', async () => {
+    const s = scenario([1200, 1200, 1200, 1200, 1200, 1200]);
+    const shifted = s.bursts.map((b) => ({ ...b, startMs: b.startMs + 9000 }));
+    const intro: Burst = { startMs: 500, durMs: 7500, hz: 900 }; // a lead guitar in the voice band, long before anyone sings
+    const f = (await analyseSignal(synthSong(s.total + 9000, [intro, ...shifted], 16_000, { hum: true }), 16_000))!;
+    const marked = alignLines(s.weights, f, { windowStartMs: 9000 - 100, windowEndMs: s.total + 9000 });
+    s.truth.forEach((t, k) => expect(Math.abs((marked.startsMs[k] ?? -9999) - (t + 9000))).toBeLessThan(500));
+    expect(marked.startsMs[0]).toBeGreaterThanOrEqual(8800);
+  });
+  it('ignores a marker window that is too small for the lines', async () => {
+    const s = scenario([1200, 1200, 1200, 1200, 1200, 1200]);
+    const f = (await analyseSignal(synthSong(s.total, s.bursts, 16_000, { hum: true }), 16_000))!;
+    const r = alignLines(s.weights, f, { windowStartMs: 5000, windowEndMs: 5100 });
+    expect(r.startsMs[LINES.length - 1]! - r.startsMs[0]!).toBeGreaterThan(LINES.length * 300);
+  });
+  it('turns down a guitar that lives only in the stereo sides, and leaves the centred voice alone', async () => {
+    const voice: Burst = { startMs: 1000, durMs: 2000, hz: 600 };
+    const guitar: Burst = { startMs: 5000, durMs: 2000, hz: 900 };
+    const mid = synthSong(9000, [voice, guitar], 16_000);
+    const side = synthSong(9000, [guitar], 16_000);
+    const mean = (f: { level: Float32Array }, fromMs: number, toMs: number): number => {
+      let sum = 0;
+      for (let i = fromMs / 20; i < toMs / 20; i += 1) sum += f.level[i] ?? 0;
+      return sum / ((toMs - fromMs) / 20);
+    };
+    const plain = (await analyseSignal(mid, 16_000))!;
+    const stereo = (await analyseSignal(mid, 16_000, { side }))!;
+    expect(mean(stereo, 1200, 2800)).toBeGreaterThan(0.6); // voice kept
+    expect(mean(stereo, 5200, 6800)).toBeLessThan(mean(plain, 5200, 6800) - 0.1); // guitar reduced
+  });
+});

@@ -15,6 +15,7 @@ import { validateNoRequest } from './validation.js';
 import {
   validateDiagnoseSource,
   validateLyricsSearch,
+  validateEditTrackInfo,
   validateSaveLyrics,
   validatePlayTrack,
   validatePositioned,
@@ -31,12 +32,16 @@ export interface PlaybackIpcDependencies {
   readonly application: PlaybackApplication;
   /** Lyrics and artwork for a track, found behind the same media-access checks as the audio. */
   readonly sidecars: TrackSidecars;
+  /** Removes solid bars from a cover for display (returns undefined when there is nothing to remove). */
+  readonly trimCover?: (bytes: Uint8Array) => Uint8Array | undefined;
   /** The native "choose a lyrics file" dialog: the chosen path, or `undefined` when the listener cancelled. The renderer never supplies a path. */
   readonly pickLyricsFile: () => Promise<string | undefined>;
   /** The native "choose a picture" dialog for a track's cover (v0.11.3): the chosen path, or `undefined` when cancelled. */
   readonly pickArtworkFile: () => Promise<string | undefined>;
   /** A track's cover was attached or removed: cached thumbnails must forget which tracks have covers. */
   readonly onArtworkChanged: () => void;
+  /** v0.15.0: store (or clear, with `undefined`) the listener's own names for a track. Returns false when the track is unknown. Main then tells the window to refresh. */
+  readonly editTrackInfo?: (trackId: string, edit: { readonly title: string; readonly artist: string; readonly album?: string } | undefined) => 'done' | 'nothing' | 'unknown';
   /** v0.12.0: what the library knows about a track (to search by), or `undefined` for an unknown id. */
   readonly describeTrack: (trackId: string) => { readonly title: string; readonly artist: string; readonly album?: string; readonly durationSec?: number } | undefined;
   /** v0.12.0: the online lyrics-text provider, or `undefined` when this build has none. */
@@ -57,7 +62,7 @@ type Value<K extends PlaybackChannel> = Extract<PlaybackIpcContract[K]['response
  * the domain, behind `PlaybackApplication`.
  */
 export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void {
-  const { registrar, application, sidecars, pickLyricsFile, pickArtworkFile, onArtworkChanged, describeTrack, lyricsProvider, isTrustedSender, log } = dependencies;
+  const { registrar, application, sidecars, trimCover, pickLyricsFile, pickArtworkFile, onArtworkChanged, editTrackInfo, describeTrack, lyricsProvider, isTrustedSender, log } = dependencies;
 
   function register<K extends PlaybackChannel, R>(
     channel: K,
@@ -141,7 +146,9 @@ export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void
   register('track:getArtwork', validateTrackRef, async ({ trackId }) => {
     const result = await sidecars.getArtwork(trackId);
     if (result.status !== 'found') return { status: result.status };
-    return { status: 'found', dataUrl: `data:${result.mimeType};base64,${Buffer.from(result.bytes).toString('base64')}`, ...(result.custom === true && { custom: true as const }) };
+    const trimmed = trimCover?.(result.bytes);
+    const [mime, bytes] = trimmed === undefined ? [result.mimeType, result.bytes] : ['image/jpeg', trimmed];
+    return { status: 'found', dataUrl: `data:${mime};base64,${Buffer.from(bytes).toString('base64')}`, ...(result.custom === true && { custom: true as const }) };
   });
 
   // Attach a cover picture by hand (v0.11.3). Same order as lyrics: the track is checked BEFORE the dialog opens; the dialog is main's own.
@@ -159,6 +166,16 @@ export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void
     const removed = await sidecars.detachArtwork(trackId);
     if (removed) onArtworkChanged();
     return { removed };
+  });
+
+  register('track:editInfo', validateEditTrackInfo, ({ trackId, title, artist, album }) => {
+    if (title === '' || artist === '') return { outcome: 'invalid' as const };
+    const result = editTrackInfo?.(trackId, { title, artist, ...(album !== undefined && { album }) });
+    return { outcome: result === 'done' ? ('saved' as const) : ('unknown' as const) };
+  });
+  register('track:resetInfo', validateTrackRef, ({ trackId }) => {
+    const result = editTrackInfo?.(trackId, undefined) ?? 'unknown';
+    return { outcome: result === 'done' ? ('reset' as const) : result === 'nothing' ? ('nothing-to-reset' as const) : ('unknown' as const) };
   });
 
   // v0.12.0 Lyric Studio. The search sends only the tags (or the listener's correction) of ONE known track.

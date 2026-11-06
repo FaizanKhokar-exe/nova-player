@@ -95,6 +95,8 @@ export function createProfileLoader(deps: ProfileDeps = browserProfileDeps(), ca
 /** The song as one mono channel at a low sample rate: all Lyric Studio's analysis needs (the voice band is under 3.5 kHz). */
 export interface MonoSignal {
   readonly samples: Float32Array;
+  /** (left - right) / 2 of a stereo song; absent for mono. */
+  readonly side?: Float32Array;
   readonly sampleRate: number;
 }
 export const STUDIO_SAMPLE_RATE = 16_000;
@@ -135,8 +137,17 @@ export function createSignalLoader(deps: SignalDeps = browserSignalDeps()) {
       try {
         const bytes = await deps.fetchBytes(url);
         if (bytes === undefined) return undefined;
-        const samples = mixToMono(await deps.decodeLowRate(bytes));
-        return samples.length === 0 ? undefined : { samples, sampleRate: STUDIO_SAMPLE_RATE };
+        const channels = await deps.decodeLowRate(bytes);
+        const samples = mixToMono(channels);
+        if (samples.length === 0) return undefined;
+        const left = channels[0];
+        const right = channels[1];
+        if (left !== undefined && right !== undefined && channels.length === 2) {
+          const side = new Float32Array(samples.length);
+          for (let i = 0; i < side.length; i += 1) side[i] = ((left[i] ?? 0) - (right[i] ?? 0)) / 2;
+          return { samples, side, sampleRate: STUDIO_SAMPLE_RATE };
+        }
+        return { samples, sampleRate: STUDIO_SAMPLE_RATE };
       } catch {
         return undefined;
       }

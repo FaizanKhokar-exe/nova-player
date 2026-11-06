@@ -75,6 +75,8 @@ export function histogramQuantile(values: Float32Array, lo: number, hi: number, 
 const yieldToUi = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 export interface AnalyseOptions {
+  /** Left-minus-right half of a stereo song (same length and rate as the samples). Voices sit in the centre, so wide guitars, pads and reverb (which fill this signal) count for less. */
+  readonly side?: Float32Array;
   readonly onProgress?: (fraction: number) => void;
   readonly isCancelled?: () => boolean;
 }
@@ -90,15 +92,27 @@ export async function analyseSignal(samples: Float32Array, sampleRate: number, o
   const hp2 = highpass(sampleRate, 250);
   const lp1 = lowpass(sampleRate, Math.min(3500, sampleRate * 0.45));
   const lp2 = lowpass(sampleRate, Math.min(3500, sampleRate * 0.45));
+  const side = options.side !== undefined && options.side.length >= samples.length ? options.side : undefined;
+  const shp1 = highpass(sampleRate, 250);
+  const shp2 = highpass(sampleRate, 250);
+  const slp1 = lowpass(sampleRate, Math.min(3500, sampleRate * 0.45));
+  const slp2 = lowpass(sampleRate, Math.min(3500, sampleRate * 0.45));
   const chunkFrames = Math.max(1, Math.round(1000 / FRAME_MS)) * 4;
   for (let frame = 0; frame < frames; frame += 1) {
     let sum = 0;
+    let sideSum = 0;
     const base = frame * hop;
     for (let i = 0; i < hop; i += 1) {
       const y = run(lp2, run(lp1, run(hp2, run(hp1, samples[base + i] ?? 0))));
       sum += y * y;
+      if (side !== undefined) {
+        const z = run(slp2, run(slp1, run(shp2, run(shp1, side[base + i] ?? 0))));
+        sideSum += z * z;
+      }
     }
-    db[frame] = 10 * Math.log10(sum / hop + 1e-10);
+    // Centre-panned sound (the voice) keeps its energy; what only exists in the side signal is mostly not the voice.
+    const power = side === undefined ? sum / hop : Math.max(sum / hop - sideSum / hop, (sum / hop) * 0.06);
+    db[frame] = 10 * Math.log10(power + 1e-10);
     if (frame % chunkFrames === chunkFrames - 1) {
       options.onProgress?.(frame / Math.max(1, frames));
       await yieldToUi();
@@ -111,7 +125,28 @@ export async function analyseSignal(samples: Float32Array, sampleRate: number, o
   // A file that is (almost) silent in the voice band has no phrases: do not stretch its hiss up to full scale.
   const silent = ceiling < -50;
   const raw = new Float32Array(frames);
-  for (let i = 0; i < frames; i += 1) raw[i] = silent ? 0 : Math.max(0, Math.min(1, ((db[i] ?? floor) - floor) / (ceiling - floor)));
+  // Dense, loudly mastered songs sit near the ceiling the whole time, so the global scale hides the dips between lines
+  // and breaths. A second scale from the surrounding ~10 s (its own quiet and loud) brings those dips back; the two are averaged.
+  const block = 100;
+  const blocks = Math.max(1, Math.ceil(frames / block));
+  const localFloor = new Float32Array(blocks);
+  const localCeil = new Float32Array(blocks);
+  for (let b = 0; b < blocks; b += 1) {
+    const from = Math.max(0, (b - 2) * block);
+    const to = Math.min(frames, (b + 3) * block);
+    const part = db.subarray(from, to);
+    localFloor[b] = histogramQuantile(part, -100, 0, 0.12);
+    localCeil[b] = histogramQuantile(part, -100, 0, 0.92);
+  }
+  for (let i = 0; i < frames; i += 1) {
+    if (silent) break;
+    const g = Math.max(0, Math.min(1, ((db[i] ?? floor) - floor) / (ceiling - floor)));
+    const b = Math.min(blocks - 1, Math.floor(i / block));
+    const lf = localFloor[b] ?? floor;
+    const lc = localCeil[b] ?? ceiling;
+    const local = lc - lf >= 6 ? Math.max(0, Math.min(1, ((db[i] ?? lf) - lf) / (lc - lf))) : g;
+    raw[i] = 0.5 * g + 0.5 * local;
+  }
   const level = new Float32Array(frames);
   for (let i = 0; i < frames; i += 1) level[i] = ((raw[i - 1] ?? raw[i] ?? 0) + (raw[i] ?? 0) * 2 + (raw[i + 1] ?? raw[i] ?? 0)) / 4;
 

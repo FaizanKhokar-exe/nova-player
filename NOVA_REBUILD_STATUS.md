@@ -1062,3 +1062,19 @@ Entry points: the sparkle button in the player bar (only when the playing song h
 - Lyric glow no longer follows the beat (setting removed). Beat particles now fill the WHOLE width: the inward side walls (which left both edges empty) were replaced by horizontal wrap-around; test asserts particles in the outer 10% on both sides after 1500 frames.
 - Focus rings appear only while Tab is used (`data-kb` on the root); mouse clicks and shortcut keys never leave a ring around icons (e2e).
 - `docs/NEXT_PHASE_PLAN.md`: proposal for online updates, FAQ/About pages, licence/brand, free ways to earn.
+
+## Phase 17 — Mood themes (v0.14.0)
+- Settings → Appearance → **Mood theme**: Off (only the accent follows the cover, as before) / **Tinted** (default: quiet tint on backgrounds, panels, menus, sidebar and player bar) / **Immersive** (deeper colour plus a soft colour wash behind the app). Works in Dark and Light; glides with the accent when the song changes.
+- `theme/mood.ts`: surfaces are built in HSL from the cover's HUE with fixed saturation and LIGHTNESS per mode/theme, so contrast does not depend on the cover. Unit test sweeps all 360 hues x 7 surfaces x 2 modes x 2 themes: normal text >= 7:1, muted text >= 4.5:1.
+- Applied through CSS custom properties on the root (`--bg`, `--panel`, `--menu-bg`, `--dock-bg`, `--sidebar-bg`, ...); "Off" removes them so the stylesheet's own values apply. Persisted with the theme (`nova.theme.v1`, new `mood` field, old values still load).
+- Not built: mood from the music's energy/tempo (calm vs energetic palettes) - possible follow-up.
+
+## Phase 18 — v0.15.0 (polish + documentation)
+- Magnet lyric animation removed (a saved "magnet" becomes Apple). New pref **Sung lines** (Dim / Fade away / Hide); hand-scrolling reveals everything.
+- Beat detector: auto-gain (quiet tracks boosted, loud untouched), spectral-flux onsets for bass-less mixes; tests at −30 dB and with no bass.
+- **HUD** (`app/Hud.tsx`): reactive volume pill + play/pause/mute/shuffle/repeat/speed confirmations; reduce-motion aware.
+- Karaoke wipe recoloured (white → accent head → dim, soft glow).
+- Lyric Studio: "Singing starts/ends here" markers (`windowStartMs/windowEndMs`), stereo side-channel suppression, local+global level normalisation. Validated on synthetic signals only.
+- `docs/SOFTWARE_DOCUMENTATION.md` added.
+- (v0.15.0, later in the same release) Right-to-left lyrics (`rtl.ts`: per-line direction, mirrored wipe, no negative letter-spacing so Urdu letters keep joining); Lyric Studio add / add-before / replace / remove a line (undo covers it); covers with solid bars are trimmed (`trim-borders.ts`, thumbnails and the big cover); equalizer popover in the player bar (`EqualizerPanel` shared with Settings); **Edit song info** (migration 8 `track_edits`, `track:editInfo` / `track:resetInfo`, "Tidy up" name cleaner, online "Find the right name" via the lyrics lookup, reset to file tags; the audio file is never changed); phonk-style beat test; analyser smoothing 0.72 -> 0.55.
+- (v0.15.0) Motion system: player rises/glides away, parts stagger in, Art/Lyrics/Visual columns and cover glide, lyrics/spectrum fade in, page change rise, menu/popover/dialog entrances; GPU-only properties; performance: `contain` on lyric lines and background, app blur/glow paused while the full-screen player is open, `data-perf` hook for Low mode. Cover-bar trim ignores smooth gradients. 99 e2e.

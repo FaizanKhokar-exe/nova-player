@@ -1,5 +1,5 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
-import type { GroupKindDto, PlaylistDto } from '@nova/shared';
+import type { GroupKindDto, PlaylistDto, TrackDto } from '@nova/shared';
 import type { IconName } from '../theme/Icon.js';
 
 /**
@@ -40,10 +40,11 @@ export interface OpenMenu {
 export type Modal =
   | { readonly kind: 'create-playlist'; readonly trackIds: readonly string[] }
   | { readonly kind: 'rename-playlist'; readonly playlist: PlaylistDto }
+  | { readonly kind: 'edit-info'; readonly track: TrackDto }
   | { readonly kind: 'add-to-playlist'; readonly trackIds: readonly string[] }
   | { readonly kind: 'confirm'; readonly title: string; readonly body: string; readonly confirmLabel: string; readonly danger?: boolean; readonly onConfirm: () => void };
 
-export type PopoverKind = 'speed' | 'sleep' | 'volume';
+export type PopoverKind = 'speed' | 'sleep' | 'volume' | 'eq';
 export interface OpenPopover {
   readonly kind: PopoverKind;
   /** The anchor button's rectangle, so the popover can sit above it. */

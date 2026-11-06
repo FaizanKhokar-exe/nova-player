@@ -29,6 +29,7 @@ interface Harness {
   dialog: { next: string | undefined; opened: number };
   artworkChanged: { count: number };
   providerQueries: { title: string; artist: string }[];
+  edits: { id: string; edit: unknown }[];
 }
 
 function harness(): Harness {
@@ -100,7 +101,8 @@ function harness(): Harness {
   };
   const artworkChanged = { count: 0 };
   const providerQueries: { title: string; artist: string }[] = [];
-  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), pickArtworkFile: async () => (dialog.opened++, '/picked/cover.png'), onArtworkChanged: () => void (artworkChanged.count += 1), describeTrack: (id: string) => (tracks.some((t) => t.id === id) ? { title: 'Imagine', artist: 'John Lennon', durationSec: 183 } : undefined), lyricsProvider: { search: async (q) => { providerQueries.push(q); return { status: 'ok' as const, candidates: [] }; } }, isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
+  const edits: { id: string; edit: unknown }[] = [];
+  registerPlaybackIpc({ registrar, application: app, sidecars, pickLyricsFile: async () => (dialog.opened++, dialog.next), pickArtworkFile: async () => (dialog.opened++, '/picked/cover.png'), onArtworkChanged: () => void (artworkChanged.count += 1), editTrackInfo: (id, edit) => (edits.push({ id, edit }), tracks.some((t) => t.id === id) ? (edit === undefined && edits.length > 3 ? 'nothing' : 'done') : 'unknown'), describeTrack: (id: string) => (tracks.some((t) => t.id === id) ? { title: 'Imagine', artist: 'John Lennon', durationSec: 183 } : undefined), lyricsProvider: { search: async (q) => { providerQueries.push(q); return { status: 'ok' as const, candidates: [] }; } }, isTrustedSender: (e) => (e as { trusted?: boolean }).trusted === true, log: (_m, e) => logged.push(e) });
   return {
     tracks,
     library,
@@ -113,6 +115,7 @@ function harness(): Harness {
     dialog,
     artworkChanged,
     providerQueries,
+    edits,
     call: async (channel, request, event = TRUSTED) => (await handlers.get(channel)!(event, request)) as IpcResult<unknown>,
   };
 }
@@ -129,7 +132,7 @@ const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playb
 describe('registration', () => {
   it('registers exactly the playback channels in the contract, once each', () => {
     expect([...h.handlers.keys()].sort()).toEqual([...PLAYBACK_CHANNELS].sort());
-    expect(PLAYBACK_CHANNELS).toHaveLength(24); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork; v0.12.0 lyrics:search / lyrics:save
+    expect(PLAYBACK_CHANNELS).toHaveLength(26); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork; v0.12.0 lyrics:search / lyrics:save; v0.15.0 track:editInfo / resetInfo
   });
 
   it('refuses every channel for an untrusted sender, before validating or running anything', async () => {
@@ -510,5 +513,26 @@ describe('v0.12.0: lyrics:search and lyrics:save', () => {
     expect(await h.call('lyrics:save', { trackId, lrc: 'no times' })).toEqual({ ok: true, value: { outcome: 'invalid' } });
     expect(await h.call('lyrics:save', { trackId, lrc: 5 })).toMatchObject({ ok: false });
     expect(await h.call('lyrics:save', { trackId, lrc: '[00:01.00]hi' }, { trusted: false })).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+  });
+});
+
+describe('v0.15.0: track:editInfo and track:resetInfo', () => {
+  it('cleans the names, stores them, and refuses empty titles, extra fields and strangers', async () => {
+    const trackId = h.tracks[0]!.id;
+    expect(await h.call('track:editInfo', { trackId, title: '  Right   Title ', artist: ' Right Artist', album: '  ' })).toEqual({ ok: true, value: { outcome: 'saved' } });
+    expect(h.edits[0]).toEqual({ id: trackId, edit: { title: 'Right Title', artist: 'Right Artist' } });
+    expect(await h.call('track:editInfo', { trackId, title: 'T', artist: 'A', album: 'Alb' })).toEqual({ ok: true, value: { outcome: 'saved' } });
+    expect(h.edits[1]?.edit).toEqual({ title: 'T', artist: 'A', album: 'Alb' });
+    expect(await h.call('track:editInfo', { trackId, title: '   ', artist: 'A' })).toEqual({ ok: true, value: { outcome: 'invalid' } });
+    expect(await h.call('track:editInfo', { trackId, title: 'T', artist: 'A', path: 'C:/x' })).toMatchObject({ ok: false });
+    expect(await h.call('track:editInfo', { trackId, title: 5, artist: 'A' })).toMatchObject({ ok: false });
+    expect(await h.call('track:editInfo', { trackId, title: 'T', artist: 'A' }, { trusted: false })).toMatchObject({ ok: false, error: { code: 'forbidden' } });
+    expect(await h.call('track:editInfo', { trackId: '123e4567-e89b-42d3-a456-426614174000', title: 'T', artist: 'A' })).toEqual({ ok: true, value: { outcome: 'unknown' } });
+  });
+  it('resets to the tags', async () => {
+    const trackId = h.tracks[0]!.id;
+    expect(await h.call('track:resetInfo', { trackId })).toEqual({ ok: true, value: { outcome: 'reset' } });
+    expect(h.edits[0]).toEqual({ id: trackId, edit: undefined });
+    expect(await h.call('track:resetInfo', { trackId: '123e4567-e89b-42d3-a456-426614174000' })).toEqual({ ok: true, value: { outcome: 'unknown' } });
   });
 });

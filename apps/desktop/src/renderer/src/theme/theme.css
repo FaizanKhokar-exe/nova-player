@@ -613,11 +613,10 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 
 /* ------------------------------------------------------------------ v0.13 lyric styles + animations ------------------------------------------------------------------ */
 .nx-lyric { transform: translateY(var(--lyric-ty, 0px)) scale(var(--lyric-scale, 0.96)); }
-[data-testid='lyrics-panel'][data-anim='magnet'] .nx-lyric { transition: opacity 520ms var(--ease-out), filter 520ms var(--ease-out), transform 640ms var(--ease-spring), background 160ms; }
-[data-testid='lyrics-panel'][data-anim='magnet'] .nx-lyric[data-state='current'] { animation: nx-pull 640ms var(--ease-spring) both; }
-@keyframes nx-pull { 0% { transform: translateY(38px) scale(0.9); opacity: 0.25; filter: blur(3px); } 100% { transform: translateY(0) scale(1); opacity: 1; filter: blur(0); } }
 [data-testid='lyrics-panel'][data-anim='karaoke'] .nx-lyric[data-state='current'] { --lyric-scale: 1.05; transition-duration: 300ms; }
-[data-testid='lyrics-panel'][data-anim='karaoke'] .nx-lyric-fill { background: linear-gradient(90deg, var(--accent-highlight) var(--p, 0%), rgba(255,255,255,.42) calc(var(--p, 0%) + 1%)); -webkit-background-clip: text; background-clip: text; }
+[data-testid='lyrics-panel'][data-anim='karaoke'] .nx-lyric-fill { background: linear-gradient(90deg, #fff 0%, color-mix(in srgb, var(--accent-highlight) 55%, #fff) calc(var(--p, 0%) - 6%), var(--accent-highlight) var(--p, 0%), rgba(255,255,255,.34) calc(var(--p, 0%) + 3%)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; filter: drop-shadow(0 0 14px color-mix(in srgb, var(--accent-highlight) 55%, transparent)); }
+[data-testid='lyrics-panel'][data-anim='karaoke'] .nx-lyric:not([data-state='current']) .nx-lyric-fill { filter: none; }
+.nx-lyric[data-gone='true'] { pointer-events: none; visibility: hidden; transition: opacity 420ms var(--ease-out), visibility 0s linear 420ms; }
 :root[data-reduce-motion='true'] [data-testid='lyrics-panel'] .nx-lyric { animation: none !important; transition-duration: 0ms !important; }
 [data-testid='lyrics-panel'][data-align='center'] .nx-lyric { text-align: center; transform-origin: center center; }
 [data-testid='lyrics-panel'][data-case='upper'] .nx-lyric { text-transform: uppercase; letter-spacing: 0.4px; }
@@ -628,3 +627,110 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 [data-testid='lyrics-panel'][data-font='rounded'] .nx-lyric { font-family: 'Nunito', 'Varela Round', 'Segoe UI', system-ui, sans-serif; }
 [data-testid='lyrics-panel'][data-font='mono'] .nx-lyric { font-family: var(--font-mono); font-weight: 700; letter-spacing: -0.6px; }
 .nx-kbd-btn { cursor: pointer; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); } .nx-kbd-btn[data-editing='true'] { border-color: var(--accent-primary); box-shadow: 0 0 0 2px rgba(var(--accent-primary-rgb), .35); }
+
+/* ------------------------------------------------------------------ v0.14 mood themes ------------------------------------------------------------------ */
+:root[data-mood='immersive'] .nx-backdrop { background: radial-gradient(1000px 640px at 10% -8%, rgba(var(--accent-primary-rgb), 0.3), transparent 62%), radial-gradient(900px 620px at 100% 108%, rgba(var(--accent-secondary-rgb), 0.24), transparent 62%), var(--bg); }
+:root[data-mood='immersive'][data-theme='light'] .nx-backdrop { background: radial-gradient(1000px 640px at 10% -8%, rgba(var(--accent-primary-rgb), 0.2), transparent 62%), radial-gradient(900px 620px at 100% 108%, rgba(var(--accent-secondary-rgb), 0.16), transparent 62%), var(--bg); }
+:root[data-mood='tinted'] .nx-backdrop { background: radial-gradient(1000px 600px at 12% -10%, rgba(var(--accent-primary-rgb), 0.1), transparent 62%), var(--bg); }
+
+/* ---- On-screen display (volume, play/pause, shuffle, repeat, speed) ---- */
+.nx-hud { position: fixed; z-index: 125; left: 50%; bottom: calc(var(--dock-h) + 72px); transform: translateX(-50%); display: flex; align-items: center; gap: 14px; padding: 12px 20px 12px 16px; border-radius: var(--r-pill); background: var(--menu-bg); border: 1px solid var(--border-strong); box-shadow: var(--shadow-md), 0 0 40px -8px rgba(var(--accent-primary-rgb), 0.45); backdrop-filter: blur(16px) saturate(1.3); pointer-events: none; animation: nx-hud-life 1500ms var(--ease-out) both; max-width: calc(100vw - 32px); }
+.nx-hud[data-kind='volume'] { min-width: min(300px, calc(100vw - 32px)); }
+.nx-hud-speaker { flex: none; color: var(--accent-highlight); }
+.nx-hud[data-dir='up'] .nx-hud-speaker { animation: nx-hud-bump-up 360ms var(--ease-spring); }
+.nx-hud[data-dir='down'] .nx-hud-speaker { animation: nx-hud-bump-down 360ms var(--ease-spring); }
+.nx-hud[data-dir='none'] .nx-hud-speaker { animation: nx-hud-bump-down 420ms var(--ease-spring); }
+.nx-hud-wave { opacity: 0.18; transition: opacity 200ms var(--ease-out); }
+.nx-hud-wave[data-on='true'] { opacity: 1; }
+.nx-hud-x { stroke: var(--danger); }
+.nx-hud-bar { position: relative; flex: 1; height: 8px; border-radius: 99px; background: rgba(255,255,255,.14); }
+.nx-hud-fill { position: absolute; inset: 0 auto 0 0; width: var(--hud-level); border-radius: inherit; background: linear-gradient(90deg, var(--accent-secondary), var(--accent-highlight)); box-shadow: 0 0 14px rgba(var(--accent-primary-rgb), 0.7); transition: width 140ms var(--ease-out); animation: nx-hud-fill-in 320ms var(--ease-out) backwards; }
+.nx-hud-knob { position: absolute; top: 50%; left: var(--hud-level); width: 16px; height: 16px; margin: -8px 0 0 -8px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 4px rgba(var(--accent-primary-rgb), 0.35), 0 2px 8px rgba(0,0,0,.45); transition: left 140ms var(--ease-out); animation: nx-hud-knob 360ms var(--ease-spring); }
+.nx-hud-num { min-width: 42px; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; font-size: 16px; }
+.nx-hud-icon { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: rgba(var(--accent-primary-rgb), 0.22); color: var(--accent-highlight); animation: nx-hud-pop 420ms var(--ease-spring); }
+.nx-hud[data-kind='action'][data-on='false'] .nx-hud-icon { background: rgba(255,255,255,.1); color: var(--text-muted, currentColor); }
+.nx-hud-label { font-weight: 600; font-size: 15px; white-space: nowrap; }
+@keyframes nx-hud-life { 0% { opacity: 0; transform: translate(-50%, 14px) scale(0.92); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); } 78% { opacity: 1; transform: translate(-50%, 0) scale(1); } 100% { opacity: 0; transform: translate(-50%, -6px) scale(0.98); } }
+@keyframes nx-hud-bump-up { 0% { transform: scale(1); } 40% { transform: scale(1.28) rotate(-6deg); } 100% { transform: scale(1); } }
+@keyframes nx-hud-bump-down { 0% { transform: scale(1); } 40% { transform: scale(0.8); } 100% { transform: scale(1); } }
+@keyframes nx-hud-pop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); } }
+@keyframes nx-hud-knob { 0% { transform: scale(0.6); } 55% { transform: scale(1.35); } 100% { transform: scale(1); } }
+@keyframes nx-hud-fill-in { from { filter: brightness(1.8); } to { filter: brightness(1); } }
+:root[data-reduce-motion='true'] .nx-hud, :root[data-reduce-motion='true'] .nx-hud * { animation-duration: 1ms !important; transition-duration: 0ms !important; }
+:root[data-reduce-motion='true'] .nx-hud { animation: nx-hud-life-calm 1500ms linear both !important; }
+@keyframes nx-hud-life-calm { 0%, 85% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; transform: translate(-50%, 0); } }
+.nx-studio-window { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+
+/* ---- Right-to-left lyrics (Urdu, Arabic, Persian, Hebrew...) ---- */
+.nx-lyric[data-rtl='true'] { text-align: start; transform-origin: right center; letter-spacing: 0; line-height: 1.55; font-weight: 700; font-family: 'Noto Nastaliq Urdu', 'Jameel Noori Nastaleeq', 'Urdu Typesetting', 'Segoe UI', Tahoma, var(--font-display); }
+.nx-lyric[data-rtl='true'] .nx-lyric-fill { background-image: linear-gradient(270deg, #fff var(--p, 0%), rgba(255,255,255,.5) calc(var(--p, 0%) + 1%)); }
+[data-testid='lyrics-panel'][data-anim='karaoke'] .nx-lyric[data-rtl='true'] .nx-lyric-fill { background-image: linear-gradient(270deg, #fff 0%, color-mix(in srgb, var(--accent-highlight) 55%, #fff) calc(var(--p, 0%) - 6%), var(--accent-highlight) var(--p, 0%), rgba(255,255,255,.34) calc(var(--p, 0%) + 3%)); }
+[data-testid='lyrics-panel'][data-align='center'] .nx-lyric[data-rtl='true'] { text-align: center; transform-origin: center center; }
+[data-testid='lyrics-panel'][data-case] .nx-lyric[data-rtl='true'] { text-transform: none; }
+.nx-srow [dir='auto'], .nx-studio-text { unicode-bidi: plaintext; }
+.nx-studio-linetools { flex: none; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.nx-studio-linetools .nx-input { flex: 1 1 260px; min-width: 200px; }
+.nx-eq-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: 12.5px; }
+.nx-eqpanel { display: flex; flex-direction: column; gap: 10px; }
+.nx-popover--eq .nx-eq { padding-top: 4px; }
+.nx-edit-helpers { display: flex; flex-wrap: wrap; gap: 8px; }
+.nx-edit-cands { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; }
+.nx-edit-cands li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 8px; border-radius: 10px; background: var(--surface); }
+.nx-edit-cand-text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ======================= Motion system (v0.15.0) =======================
+   One set of curves and durations, transform/opacity only (they run on the GPU compositor), nothing that forces layout
+   on every frame. Everything is switched off by Reduce motion (rule near the top of this file). */
+:root { --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1); --dur-fast: 140ms; --dur: 280ms; --dur-slow: 440ms; }
+
+/* Player: rises from the bottom bar, and glides back down on close (NowPlaying.tsx keeps it mounted for EXIT_MS = 260). */
+.nx-np { animation: nx-np-in 420ms var(--ease-out) backwards; transform-origin: 50% 100%; }
+.nx-np[data-closing='true'] { animation: nx-np-out 260ms var(--ease-in-out) forwards; pointer-events: none; }
+@keyframes nx-np-in { from { opacity: 0; transform: translate3d(0, 6%, 0) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes nx-np-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translate3d(0, 6%, 0) scale(0.985); } }
+/* Its parts arrive one after another instead of all at once. */
+.nx-np-top, .nx-np-left > *, .nx-np-right { animation: nx-rise 460ms var(--ease-out) backwards; }
+.nx-np-top { animation-delay: 60ms; }
+.nx-np-left > :nth-child(1) { animation-delay: 90ms; }
+.nx-np-left > :nth-child(2) { animation-delay: 140ms; }
+.nx-np-left > :nth-child(3) { animation-delay: 180ms; }
+.nx-np-left > :nth-child(4) { animation-delay: 220ms; }
+.nx-np-left > :nth-child(n + 5) { animation-delay: 260ms; }
+.nx-np-right { animation-delay: 160ms; }
+@keyframes nx-rise { from { opacity: 0; transform: translate3d(0, 14px, 0); } to { opacity: 1; transform: none; } }
+.nx-np[data-closing='true'] .nx-np-top, .nx-np[data-closing='true'] .nx-np-left > *, .nx-np[data-closing='true'] .nx-np-right { animation: none; }
+
+/* Art / Lyrics / Visual: the columns glide to their new widths, the cover resizes smoothly, and the lyrics or the spectrum fade in. */
+.nx-np-stage { transition: grid-template-columns var(--dur-slow) var(--ease-out); }
+.nx-np-cover { transition: transform 90ms linear, width var(--dur-slow) var(--ease-out); }
+[data-testid='lyrics-panel'], .nx-np-spectrum { animation: nx-swap 420ms var(--ease-out) backwards; }
+@keyframes nx-swap { from { opacity: 0; transform: translate3d(0, 18px, 0) scale(0.985); } to { opacity: 1; transform: none; } }
+.nx-np-art { transition: opacity 700ms var(--ease-out), filter var(--dur-slow) var(--ease-out); }
+
+/* Pages: a short fade and rise when you switch screen. */
+.nx-scroll { animation: nx-view-in var(--dur) var(--ease-out) backwards; }
+@keyframes nx-view-in { from { opacity: 0; transform: translate3d(0, 10px, 0); } to { opacity: 1; transform: none; } }
+
+/* Pop-ups, menus and dialogs: scale in from where they were opened (slight spring for dialogs). */
+.nx-menu, .nx-popover { transform-origin: 50% 100%; animation: nx-pop-in var(--dur-fast) var(--ease-out) backwards; }
+.nx-modal { animation: nx-modal-in 300ms var(--ease-spring) backwards; }
+@keyframes nx-pop-in { from { opacity: 0; transform: translate3d(0, 6px, 0) scale(0.96); } to { opacity: 1; transform: none; } }
+@keyframes nx-modal-in { from { opacity: 0; transform: translate3d(0, 14px, 0) scale(0.94); } to { opacity: 1; transform: none; } }
+
+/* Small things that should feel alive: lists, cards and toggles ease their colour and lift. */
+.nx-icon-btn, .nx-pill, .nx-chip, .nx-switch { transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out), transform var(--dur-fast) var(--ease-out), opacity var(--dur-fast) var(--ease-out); }
+.nx-queue { will-change: transform; }
+
+/* ---- Performance ---- */
+/* Each lyric line and the background layers are painted on their own, so one changing never repaints the others. */
+.nx-lyric { contain: layout paint style; }
+.nx-np-bg { contain: strict; }
+.nx-np-canvas { will-change: contents; }
+/* While the full-screen player covers the app, the app underneath stops spending GPU on blur and glow. */
+:root:has(.nx-np:not([data-closing='true'])) .nx-glow { visibility: hidden; }
+:root:has(.nx-np:not([data-closing='true'])) .nx-dock, :root:has(.nx-np:not([data-closing='true'])) .nx-topbar, :root:has(.nx-np:not([data-closing='true'])) .nx-sidebar { backdrop-filter: none; -webkit-backdrop-filter: none; }
+/* Performance mode "Low": no blur on pop-ups, simpler entrances. */
+:root[data-perf='low'] .nx-menu, :root[data-perf='low'] .nx-popover, :root[data-perf='low'] .nx-hud, :root[data-perf='low'] .nx-np-modes { backdrop-filter: none; }
+:root[data-perf='low'] .nx-np-top, :root[data-perf='low'] .nx-np-left > *, :root[data-perf='low'] .nx-np-right { animation: none; }
+/* Reduce motion also silences the new entrances. */
+:root[data-reduce-motion='true'] .nx-np, :root[data-reduce-motion='true'] .nx-scroll, :root[data-reduce-motion='true'] .nx-menu, :root[data-reduce-motion='true'] .nx-modal { animation: none !important; }

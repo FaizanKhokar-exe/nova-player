@@ -20,6 +20,9 @@ export interface AlignOptions {
   readonly anchors?: ReadonlyMap<number, number>;
   /** a blank line separated this line from the previous one (a pause is likely here). */
   readonly breakBefore?: readonly boolean[];
+  /** Where the listener says the singing begins / ends (ms). Beats guessing: intros and outros full of instruments otherwise look "sung". */
+  readonly windowStartMs?: number;
+  readonly windowEndMs?: number;
 }
 
 export interface AlignResult {
@@ -63,8 +66,12 @@ function* alignSteps(weights: readonly number[], f: VocalFeatures, options: Alig
   const duration = f.durationMs;
   const firstPhrase = f.phrases[0];
   const lastPhrase = f.phrases[f.phrases.length - 1];
-  const songStart = firstPhrase === undefined ? 0 : Math.max(0, firstPhrase.startMs - 150);
-  const songEnd = lastPhrase === undefined ? duration : Math.min(duration, lastPhrase.endMs + 400);
+  const guessStart = firstPhrase === undefined ? 0 : Math.max(0, firstPhrase.startMs - 150);
+  const guessEnd = lastPhrase === undefined ? duration : Math.min(duration, lastPhrase.endMs + 400);
+  const songStart = options.windowStartMs !== undefined ? Math.max(0, Math.min(duration, options.windowStartMs)) : guessStart;
+  const rawEnd = options.windowEndMs !== undefined ? Math.max(0, Math.min(duration, options.windowEndMs)) : guessEnd;
+  // A window too small for the lines (markers swapped or almost equal) is ignored rather than crushing them together.
+  const songEnd = rawEnd - songStart >= n * 400 ? rawEnd : Math.max(guessEnd, songStart + n * 400);
 
   for (const [index, ms] of anchors) {
     if (index >= 0 && index < n) {
