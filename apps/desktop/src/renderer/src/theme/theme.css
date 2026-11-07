@@ -633,40 +633,34 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 :root[data-mood='immersive'][data-theme='light'] .nx-backdrop { background: radial-gradient(1000px 640px at 10% -8%, rgba(var(--accent-primary-rgb), 0.2), transparent 62%), radial-gradient(900px 620px at 100% 108%, rgba(var(--accent-secondary-rgb), 0.16), transparent 62%), var(--bg); }
 :root[data-mood='tinted'] .nx-backdrop { background: radial-gradient(1000px 600px at 12% -10%, rgba(var(--accent-primary-rgb), 0.1), transparent 62%), var(--bg); }
 
-/* ---- On-screen display (volume, play/pause, shuffle, repeat, speed) ----
-   A glass card that stays mounted: it eases in, its segments and number change in place, and it eases out. */
-.nx-hud { position: fixed; z-index: 125; left: 50%; bottom: calc(var(--dock-h) + 76px); display: grid; place-items: center; pointer-events: none; opacity: 0; transform: translate3d(-50%, 18px, 0) scale(0.94); transition: opacity 260ms var(--ease-out), transform 380ms var(--ease-spring); }
-.nx-hud[data-show='true'] { opacity: 1; transform: translate3d(-50%, 0, 0) scale(1); }
-.nx-hud[data-show='false'] { transition: opacity 360ms var(--ease-in-out), transform 360ms var(--ease-in-out); transform: translate3d(-50%, 8px, 0) scale(0.97); }
-.nx-hud-card { position: relative; display: flex; align-items: center; gap: 16px; padding: 14px 22px 14px 16px; border-radius: 26px; color: var(--text); background: linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03)), var(--menu-bg); border: 1px solid rgba(255,255,255,0.14); box-shadow: 0 18px 48px rgba(0,0,0,0.45), 0 0 0 1px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.18), 0 0 60px -14px rgba(var(--accent-primary-rgb), 0.55); backdrop-filter: blur(22px) saturate(1.5); animation: nx-hud-swap 260ms var(--ease-out); }
-@keyframes nx-hud-swap { from { opacity: 0; transform: scale(0.96); } to { opacity: 1; transform: none; } }
-.nx-hud-card--volume { width: min(420px, calc(100vw - 32px)); }
-.nx-hud-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 15px; flex: none; color: var(--accent-highlight); background: rgba(var(--accent-primary-rgb), 0.2); box-shadow: inset 0 0 0 1px rgba(var(--accent-primary-rgb), 0.35); animation: nx-hud-nudge 380ms var(--ease-spring); }
+/* ---- On-screen display: a slim vertical volume bar and a small chip for actions, bottom-right ----
+   Stays mounted: eases in and out, the fill glides, nothing restarts on every key press. */
+.nx-hud { position: fixed; z-index: 125; right: 22px; bottom: calc(var(--dock-h) + 22px); display: flex; flex-direction: column; align-items: flex-end; pointer-events: none; opacity: 0; transform: translate3d(14px, 0, 0); transition: opacity 240ms var(--ease-out), transform 360ms var(--ease-spring); }
+.nx-hud[data-show='true'] { opacity: 1; transform: none; }
+.nx-hud[data-show='false'] { transition: opacity 320ms var(--ease-in-out), transform 320ms var(--ease-in-out); transform: translate3d(10px, 0, 0); }
+.nx-hud-card { color: var(--text); background: color-mix(in srgb, var(--menu-bg) 88%, transparent); border: 1px solid rgba(255,255,255,0.12); box-shadow: 0 10px 30px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.12); backdrop-filter: blur(18px) saturate(1.4); animation: nx-hud-swap 200ms var(--ease-out); }
+@keyframes nx-hud-swap { from { opacity: 0; } to { opacity: 1; } }
+.nx-hud-card--volume { display: flex; flex-direction: column; align-items: center; gap: 10px; width: 44px; padding: 12px 0 11px; border-radius: 22px; }
+.nx-hud-num { font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums; letter-spacing: 0.01em; opacity: 0.9; }
+.nx-hud-num b { display: inline-block; font-weight: 700; animation: nx-hud-tick 160ms var(--ease-out); }
+.nx-hud-track { position: relative; width: 6px; height: 118px; border-radius: 99px; background: rgba(255,255,255,0.14); overflow: hidden; }
+.nx-hud-fill { position: absolute; inset: 0; border-radius: inherit; background: linear-gradient(0deg, var(--accent-secondary), var(--accent-highlight)); transform-origin: 50% 100%; transform: scaleY(var(--v)); transition: transform 180ms var(--ease-out); box-shadow: 0 0 12px rgba(var(--accent-primary-rgb), 0.7); }
+.nx-hud-icon { display: grid; place-items: center; color: var(--accent-highlight); animation: nx-hud-nudge 320ms var(--ease-spring); }
 .nx-hud-card[data-dir='down'] .nx-hud-icon { animation-name: nx-hud-nudge-down; }
-.nx-hud-card[data-muted='true'] .nx-hud-icon { color: var(--danger); background: rgba(255,80,80,0.14); box-shadow: inset 0 0 0 1px rgba(255,80,80,0.35); }
-.nx-hud-wave { opacity: 0.2; transition: opacity 220ms var(--ease-out); }
+.nx-hud-card[data-muted='true'] .nx-hud-icon { color: var(--danger); }
+.nx-hud-card[data-muted='true'] .nx-hud-fill { opacity: 0.3; }
+.nx-hud-wave { opacity: 0.22; transition: opacity 200ms var(--ease-out); }
 .nx-hud-wave[data-on='true'] { opacity: 1; }
 .nx-hud-x { stroke: var(--danger); }
-/* Level meter: 20 slim segments that grow taller to the right and light up in a quick wave. */
-.nx-hud-meter { flex: 1; display: flex; align-items: flex-end; gap: 3px; height: 30px; }
-.nx-hud-meter i { flex: 1; height: calc(8px + var(--i) * 1.15px); border-radius: 3px; background: rgba(255,255,255,0.13); transform-origin: 50% 100%; transition: background 220ms var(--ease-out) var(--fall), box-shadow 220ms var(--ease-out) var(--fall), transform 220ms var(--ease-out) var(--fall); }
-.nx-hud-meter i[data-lit='true'] { background: linear-gradient(180deg, var(--accent-highlight), var(--accent-secondary)); box-shadow: 0 0 10px rgba(var(--accent-primary-rgb), 0.65); transform: scaleY(1.08); transition: background 160ms var(--ease-out) var(--rise), box-shadow 160ms var(--ease-out) var(--rise), transform 260ms var(--ease-spring) var(--rise); }
-.nx-hud-card[data-muted='true'] .nx-hud-meter i { opacity: 0.45; }
-.nx-hud-num { min-width: 64px; text-align: right; display: flex; align-items: baseline; justify-content: flex-end; gap: 1px; font-variant-numeric: tabular-nums; }
-.nx-hud-num b { font-size: 26px; font-weight: 700; letter-spacing: -0.02em; animation: nx-hud-tick 200ms var(--ease-out); }
-.nx-hud-num small { font-size: 13px; opacity: 0.6; font-weight: 600; }
-.nx-hud-card--action { flex-direction: column; gap: 10px; padding: 18px 26px 16px; min-width: 150px; }
-.nx-hud-badge { position: relative; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; color: var(--accent-highlight); background: radial-gradient(circle at 30% 25%, rgba(var(--accent-primary-rgb), 0.38), rgba(var(--accent-primary-rgb), 0.12)); animation: nx-hud-pop 420ms var(--ease-spring); }
-.nx-hud-card--action[data-on='false'] .nx-hud-badge { color: var(--text-muted, currentColor); background: rgba(255,255,255,0.08); }
-.nx-hud-ring { position: absolute; inset: -4px; width: calc(100% + 8px); height: calc(100% + 8px); transform: rotate(-90deg); }
-.nx-hud-ring circle { fill: none; stroke: var(--accent-highlight); stroke-width: 2; stroke-linecap: round; stroke-dasharray: 100; stroke-dashoffset: 0; opacity: 0.85; animation: nx-hud-ring 1500ms linear forwards; }
-.nx-hud-label { font-weight: 600; font-size: 15px; letter-spacing: 0.01em; white-space: nowrap; animation: nx-hud-tick 240ms var(--ease-out); }
-@keyframes nx-hud-nudge { 0% { transform: scale(0.85); } 55% { transform: scale(1.14) rotate(-4deg); } 100% { transform: none; } }
-@keyframes nx-hud-nudge-down { 0% { transform: scale(1.1); } 55% { transform: scale(0.9); } 100% { transform: none; } }
-@keyframes nx-hud-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.1); opacity: 1; } 100% { transform: none; } }
-@keyframes nx-hud-tick { from { opacity: 0.2; transform: translate3d(0, 5px, 0); } to { opacity: 1; transform: none; } }
-@keyframes nx-hud-ring { from { stroke-dashoffset: 0; } to { stroke-dashoffset: 100; } }
-:root[data-reduce-motion='true'] .nx-hud, :root[data-reduce-motion='true'] .nx-hud * { animation: none !important; transition-duration: 1ms !important; transition-delay: 0ms !important; }
+.nx-hud-card--action { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 16px 0 7px; border-radius: 19px; }
+.nx-hud-badge { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; color: var(--accent-highlight); background: rgba(var(--accent-primary-rgb), 0.22); animation: nx-hud-pop 320ms var(--ease-spring); }
+.nx-hud-card--action[data-on='false'] .nx-hud-badge { color: var(--text-muted, currentColor); background: rgba(255,255,255,0.1); }
+.nx-hud-label { font-weight: 600; font-size: 13px; white-space: nowrap; animation: nx-hud-tick 200ms var(--ease-out); }
+@keyframes nx-hud-nudge { 0% { transform: scale(0.8); } 55% { transform: scale(1.18); } 100% { transform: none; } }
+@keyframes nx-hud-nudge-down { 0% { transform: scale(1.15); } 55% { transform: scale(0.88); } 100% { transform: none; } }
+@keyframes nx-hud-pop { 0% { transform: scale(0.6); opacity: 0; } 60% { transform: scale(1.12); opacity: 1; } 100% { transform: none; } }
+@keyframes nx-hud-tick { from { opacity: 0.3; transform: translate3d(0, 4px, 0); } to { opacity: 1; transform: none; } }
+:root[data-reduce-motion='true'] .nx-hud, :root[data-reduce-motion='true'] .nx-hud * { animation: none !important; transition-duration: 1ms !important; }
 :root[data-perf='low'] .nx-hud-card { backdrop-filter: none; }
 
 /* ---- Right-to-left lyrics (Urdu, Arabic, Persian, Hebrew...) ---- */
@@ -742,3 +736,6 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 :root[data-perf='low'] .nx-np-top, :root[data-perf='low'] .nx-np-left > *, :root[data-perf='low'] .nx-np-right { animation: none; }
 /* Reduce motion also silences the new entrances. */
 :root[data-reduce-motion='true'] .nx-np, :root[data-reduce-motion='true'] .nx-scroll, :root[data-reduce-motion='true'] .nx-menu, :root[data-reduce-motion='true'] .nx-modal { animation: none !important; }
+/* Edit + heart always sit together at the end of the title row, so they never wander with the title's length. */
+.nx-dock-meta { flex: 1 1 auto; }
+.nx-dock-actions, .nx-np-actions { flex: none; display: flex; align-items: center; gap: 2px; }

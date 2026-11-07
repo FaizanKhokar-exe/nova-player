@@ -129,15 +129,15 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
             <Artwork size="100%" title={track?.title} seed={track?.album ?? track?.title} />
           </div>
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, minWidth: 0 }}>
-            <div style={{ minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ minWidth: 0, flex: '1 1 auto', display: 'flex', flexDirection: 'column', gap: 4 }}>
               <span className="nx-np-title nx-clamp-2 nx-text" dir="auto" data-testid="np-title">{track?.title ?? 'Nothing playing'}</span>
               <span className="nx-np-artist nx-ellipsis nx-text" dir="auto" data-testid="np-artist">{track?.artist ?? ''}</span>
             </div>
             {track !== undefined && (
+              <div className="nx-np-actions">
               <button type="button" className="nx-icon-btn" aria-label="Edit song info" data-testid="np-edit-info" onClick={() => ui.getState().openModal({ kind: 'edit-info', track })}><Icon name="edit" size={20} /></button>
-            )}
-            {track !== undefined && (
-              <HeartButton size={22} favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="np-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
+  <HeartButton size={22} favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="np-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
+              </div>
             )}
           </div>
           <SeekBar stacked />

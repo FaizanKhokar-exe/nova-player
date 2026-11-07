@@ -72,8 +72,10 @@ export function Dock() {
               <span className="nx-dock-title nx-ellipsis nx-text" dir="auto" data-testid="player-title">{track.title}</span>
               <span className="nx-dock-artist nx-ellipsis nx-text" dir="auto" data-testid="player-artist">{track.artist}</span>
             </div>
+            <div className="nx-dock-actions">
             <button type="button" className="nx-icon-btn nx-icon-btn--small" aria-label="Edit song info" data-testid="player-edit-info" onClick={() => ui.getState().openModal({ kind: 'edit-info', track })}><Icon name="edit" size={16} /></button>
             <HeartButton className="nx-icon-btn--small" favorite={favorite} label={favorite ? 'Remove from Favorites' : 'Add to Favorites'} testId="player-heart" onToggle={() => void collections.getState().toggleFavorite(track.id)} />
+            </div>
           </>
         )}
       </div>
