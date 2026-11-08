@@ -30,8 +30,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # GitHub's download server sometimes answers 504 for a moment: try up to 5 times with a growing pause.
       - name: Fetch the Electron binary (pnpm skips install scripts)
-        run: npx install-electron
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 5; $i++) {
+            npx install-electron
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Download failed (attempt $i of 5), waiting before retrying..."
+            Start-Sleep -Seconds (20 * $i)
+          }
+          exit 1
 
       # Typecheck, lint and tests run on Linux in ci.yml (that is where they were validated); this workflow only builds.
 
