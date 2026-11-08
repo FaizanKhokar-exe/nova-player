@@ -44,8 +44,27 @@ jobs:
 
       # Typecheck, lint and tests run on Linux in ci.yml (that is where they were validated); this workflow only builds.
 
+      # Keep what electron-builder downloads (Electron, NSIS, ...) so a retry or the next run does not fetch it again.
+      - name: Cache electron downloads
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~\AppData\Local\electron\Cache
+            ~\AppData\Local\electron-builder\Cache
+          key: electron-dl-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-dl-${{ runner.os }}-
+
+      # GitHub's download servers sometimes answer 504 for a moment: try the build up to 5 times.
       - name: Build the installer
-        run: pnpm --filter @nova/desktop run dist:win
+        shell: pwsh
+        run: |
+          for ($i = 1; $i -le 5; $i++) {
+            pnpm --filter @nova/desktop run dist:win
+            if ($LASTEXITCODE -eq 0) { exit 0 }
+            Write-Host "Build failed (attempt $i of 5), waiting before retrying..."
+            Start-Sleep -Seconds (20 * $i)
+          }
+          exit 1
 
       - name: Show what was built
         shell: pwsh
