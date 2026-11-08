@@ -1,5 +1,5 @@
 import { CUSTOMIZABLE, SHORTCUT_HELP, conflictFor, isAssignableKey, keyLabel, type CustomizableId } from '../shortcuts.js';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { EqualizerPanel } from '../EqualizerPanel.js';
@@ -11,7 +11,7 @@ import { LYRICS_SIZE_RANGE, SWATCHES } from '../../theme/theme-store.js';
 import type { MoodMode } from '../../theme/mood.js';
 import { useCollections } from '../../collections/CollectionsStoreProvider.js';
 import { useActions, addFolderAndScan } from '../actions.js';
-import { usePrefs, useServices } from '../services.js';
+import { usePrefs, useServices, useUpdates } from '../services.js';
 
 function Setting({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
@@ -22,6 +22,49 @@ function Setting({ title, hint, children }: { title: string; hint?: string; chil
       </div>
       <div className="nx-setting-control">{children}</div>
     </div>
+  );
+}
+
+/** Version, "check for updates" and the switch for the one automatic look after launch. */
+function UpdatesSection() {
+  const { prefs, updates } = useServices();
+  const auto = usePrefs((s) => s.autoUpdateCheck);
+  const status = useUpdates((s) => s.status);
+  useEffect(() => { void updates.getState().refresh(); }, [updates]);
+  useEffect(() => {
+    if (status.state !== 'downloading') return undefined;
+    const timer = setInterval(() => { void updates.getState().refresh(); }, 700);
+    return () => clearInterval(timer);
+  }, [status.state, updates]);
+  const busy = status.state === 'checking' || status.state === 'downloading';
+  const text = ((): string => {
+    switch (status.state) {
+      case 'unsupported': return 'Updates work in the installed app (not in a development run).';
+      case 'checking': return 'Looking for a newer version…';
+      case 'none': return 'You have the latest version.';
+      case 'available': return `Version ${status.version ?? ''} is available.`;
+      case 'downloading': return `Downloading version ${status.version ?? ''}… ${Math.round(status.percent ?? 0)}%`;
+      case 'ready': return `Version ${status.version ?? ''} is ready. Restart to finish.`;
+      case 'error': return status.message ?? 'Could not check for updates right now.';
+      default: return 'Not checked yet.';
+    }
+  })();
+  return (
+    <section className="nx-card" aria-labelledby="set-updates">
+      <h2 className="nx-h2" id="set-updates">Updates</h2>
+      <Setting title={`Nova Player ${status.currentVersion}`} hint={text}>
+        <span data-testid="update-status" data-state={status.state}>
+          {status.state === 'available' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" onClick={() => void updates.getState().download()}>Download</button>}
+          {status.state === 'ready' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" onClick={() => void updates.getState().install()}>Restart &amp; update</button>}
+          {status.state !== 'available' && status.state !== 'ready' && (
+            <button type="button" className="nx-btn nx-btn--small" disabled={busy || status.state === 'unsupported'} onClick={() => void updates.getState().check()}>Check for updates</button>
+          )}
+        </span>
+      </Setting>
+      <Setting title="Check automatically" hint="Once after launch, Nova Player asks GitHub if a newer version exists. Nothing else is sent. Updates are never installed without your click.">
+        <Switch label="Check for updates automatically" checked={auto} onChange={(v) => prefs.getState().setAutoUpdateCheck(v)} />
+      </Setting>
+    </section>
   );
 }
 
@@ -248,6 +291,8 @@ export function SettingsView() {
           <button type="button" className="nx-btn nx-btn--small" data-testid="reset-prefs" onClick={() => { prefs.getState().resetAll(); theme.getState().setMode('dark'); theme.getState().setAccent('dynamic'); theme.getState().setReduceMotion(false); theme.getState().setLyricsSize(34); void collections; }}>Reset</button>
         </Setting>
       </section>
+
+      <UpdatesSection />
 
       <section className="nx-card" aria-labelledby="set-keys">
         <h2 className="nx-h2" id="set-keys">Keyboard shortcuts</h2>

@@ -358,7 +358,7 @@ interface Toast {
 
 /** One place that turns the app's notices (favourites, queue, sleep timer, playback problems) into a short toast. */
 export function ToastLayer() {
-  const { collections, playback, audioControls } = useServices();
+  const { collections, playback, audioControls, updates } = useServices();
   const [toast, setToast] = useState<Toast | undefined>(undefined);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -378,13 +378,17 @@ export function ToastLayer() {
     const c = audioControls.subscribe((s, p) => {
       if (s.notice !== undefined && s.notice !== p.notice) show({ key: `a${Date.now()}`, text: s.notice, tone: 'ok' });
     });
+    const d = updates?.subscribe((s, p) => {
+      if (s.announced !== undefined && s.announced !== p.announced) show({ key: `u${s.announced}`, text: `Update ${s.announced} is available — open Settings to install it.`, tone: 'ok' });
+    });
     return () => {
       a();
       b();
       c();
+      d?.();
       if (timer.current !== undefined) clearTimeout(timer.current);
     };
-  }, [collections, playback, audioControls, show]);
+  }, [collections, playback, audioControls, updates, show]);
 
   return (
     <div className="nx-toasts" aria-live="polite" role="status" data-testid="toasts">

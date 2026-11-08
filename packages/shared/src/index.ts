@@ -27,6 +27,7 @@ export * from './browse-ipc.js';
 export * from './track-detail-ipc.js';
 export * from './lyrics-studio-ipc.js';
 export * from './track-edit-ipc.js';
+export * from './update-ipc.js';
 export * from './playback-ipc.js';
 export * from './collections-ipc.js';
 import type {
@@ -55,6 +56,7 @@ import type {
   ThumbnailDto,
   WallpaperDto,
 } from './collections-ipc.js';
+import type { UpdateStatusDto } from './update-ipc.js';
 import type { EditTrackInfoRequest, EditTrackInfoResultDto, ResetTrackInfoResultDto } from './track-edit-ipc.js';
 import type { LyricsSearchRequest, LyricsSearchResultDto, SaveLyricsRequest, SaveLyricsResultDto } from './lyrics-studio-ipc.js';
 import type { ArtworkDto, AttachArtworkResultDto, AttachLyricsResultDto, DetachArtworkResultDto, DetachLyricsResultDto, LyricsDto, TrackRefRequest } from './track-detail-ipc.js';
@@ -164,6 +166,11 @@ export interface PlaybackIpcContract {
   'track:editInfo': { request: EditTrackInfoRequest; response: IpcResult<EditTrackInfoResultDto> };
   /** v0.15.0: back to the tags the file itself carries. */
   'track:resetInfo': { request: TrackRefRequest; response: IpcResult<ResetTrackInfoResultDto> };
+  /** v0.15.2: app updates from GitHub Releases (nothing downloads without `update:download`). */
+  'update:getStatus': { request: void; response: IpcResult<UpdateStatusDto> };
+  'update:check': { request: void; response: IpcResult<UpdateStatusDto> };
+  'update:download': { request: void; response: IpcResult<UpdateStatusDto> };
+  'update:install': { request: void; response: IpcResult<UpdateStatusDto> };
 }
 
 export interface PingRequest {
@@ -277,6 +284,10 @@ export const IPC_INVOKE_CHANNELS = [
   'lyrics:save',
   'track:editInfo',
   'track:resetInfo',
+  'update:getStatus',
+  'update:check',
+  'update:download',
+  'update:install',
   'favorites:list',
   'favorites:ids',
   'favorites:set',

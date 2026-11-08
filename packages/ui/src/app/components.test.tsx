@@ -122,13 +122,23 @@ describe('Hud', () => {
     expect(screen.getByTestId('hud-volume')).toHaveTextContent('Muted');
   });
   it('confirms play / pause and shuffle', () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
     const store = createStore(() => ({ engine: { volume: 1, muted: false, playing: true, loaded: true }, session: { shuffle: false, repeatMode: 'off' } })) as unknown as PlaybackStoreApi;
     render(withServices({ playback: store, prefs: createPrefsStore({ getItem: () => null, setItem: () => undefined }) }, <Hud />));
+    // the song ends and the next one loads: playing flips by itself - no HUD
+    act(() => store.setState({ engine: { volume: 1, muted: false, playing: false, loaded: true } } as never));
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+    act(() => store.setState({ engine: { volume: 1, muted: false, playing: true, loaded: true } } as never));
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+    // later, the listener presses pause
+    vi.setSystemTime(Date.now() + 5000);
     act(() => store.setState({ engine: { volume: 1, muted: false, playing: false, loaded: true } } as never));
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Pause');
     act(() => store.setState({ session: { shuffle: true, repeatMode: 'off' } } as never));
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Shuffle on');
     act(() => store.setState({ session: { shuffle: true, repeatMode: 'one' } } as never));
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Repeat this song');
+    vi.useRealTimers();
   });
 });

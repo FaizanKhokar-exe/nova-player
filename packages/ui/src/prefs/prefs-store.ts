@@ -57,6 +57,8 @@ export interface Prefs {
   readonly trackFadeSec: number;
   /** The sleep timer lowers the volume over its last 20 seconds instead of stopping abruptly. */
   readonly sleepFade: boolean;
+  /** Ask GitHub once after launch whether a newer version exists (the only network use besides lyrics search). */
+  readonly autoUpdateCheck: boolean;
   readonly shortcutOverrides: ShortcutOverrides;
 }
 
@@ -83,6 +85,7 @@ export interface PrefsActions {
   setBeatIntensity(value: BeatIntensity): void;
   setTrackFadeSec(value: number): void;
   setSleepFade(value: boolean): void;
+  setAutoUpdateCheck(value: boolean): void;
   /** `key` undefined removes the override. */
   setShortcut(action: string, key: string | undefined): void;
   resetAll(): void;
@@ -113,6 +116,7 @@ export const DEFAULT_PREFS: Prefs = {
   beatIntensity: 'normal',
   trackFadeSec: 0,
   sleepFade: true,
+  autoUpdateCheck: true,
   shortcutOverrides: {},
 };
 
@@ -171,6 +175,7 @@ function sanitize(raw: unknown): Prefs {
     beatIntensity: oneOf(p.beatIntensity, ['off', 'subtle', 'normal', 'strong'], DEFAULT_PREFS.beatIntensity),
     trackFadeSec: typeof p.trackFadeSec === 'number' && (TRACK_FADE_SECONDS as readonly number[]).includes(p.trackFadeSec) ? p.trackFadeSec : 0,
     sleepFade: typeof p.sleepFade === 'boolean' ? p.sleepFade : DEFAULT_PREFS.sleepFade,
+    autoUpdateCheck: typeof p.autoUpdateCheck === 'boolean' ? p.autoUpdateCheck : DEFAULT_PREFS.autoUpdateCheck,
     shortcutOverrides: sanitizeOverrides(p.shortcutOverrides),
   };
 }
@@ -214,6 +219,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
     setBeatIntensity: (beatIntensity) => set({ beatIntensity }),
     setTrackFadeSec: (value) => set({ trackFadeSec: (TRACK_FADE_SECONDS as readonly number[]).includes(value) ? value : 0 }),
     setSleepFade: (sleepFade) => set({ sleepFade }),
+    setAutoUpdateCheck: (autoUpdateCheck) => set({ autoUpdateCheck }),
     setShortcut: (action, key) => {
       const next = { ...get().shortcutOverrides };
       if (key === undefined) delete next[action];
@@ -246,6 +252,7 @@ export function createPrefsStore(storage: StorageLike | undefined = defaultStora
         beatIntensity: s.beatIntensity,
         trackFadeSec: s.trackFadeSec,
         sleepFade: s.sleepFade,
+        autoUpdateCheck: s.autoUpdateCheck,
         shortcutOverrides: s.shortcutOverrides,
       };
       storage?.setItem(KEY, JSON.stringify(value));

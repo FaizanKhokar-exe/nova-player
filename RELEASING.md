@@ -97,10 +97,19 @@ it on Windows.
   compiled test files and source maps out. `better-sqlite3`'s C++ sources are excluded (prebuilds only).
 - `resources/icon.png` and `resources/tray.png` are copied beside the asar
   (`process.resourcesPath`), which is where the app reads them when packaged.
-- No `publish` provider (`publish: null`): nothing is uploaded and no update feed exists.
+- `publish` is the GitHub provider (owner FaizanKhokar-exe, repo nova-player) but builds run with `--publish never`: nothing is uploaded by electron-builder; it only writes `latest.yml` + `.blockmap` next to the installer.
 - NSIS: not one-click, user may choose the install directory, Desktop and Start Menu shortcuts,
   per-user by default, `deleteAppDataOnUninstall: false`.
 - App data lives in `%APPDATA%\Nova Player` (set by `productName` in `apps/desktop/package.json`).
+
+## Publishing an update (free, GitHub Releases)
+
+1. Bump `version` in `apps/desktop/package.json` (e.g. 0.16.1) and push.
+2. Tag it: `git tag v0.16.1 && git push origin v0.16.1`.
+3. The *Windows installer* workflow builds and attaches `Nova-Player-Setup-0.16.1.exe`, its `.blockmap` and `latest.yml` to the Release.
+4. Installed apps (Settings -> Updates, or the automatic check ~8 s after launch) see the new `latest.yml`, show a notice, download on click and install on "Restart & update".
+
+Requirements: the repository must be **public** (no token inside the app); the first install is always manual; the tag version must match `package.json`; unsigned builds still update but SmartScreen warns on a fresh download. Untested on real Windows/GitHub until the first real release.
 
 ## Code signing (optional; not configured)
 

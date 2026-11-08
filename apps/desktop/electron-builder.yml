@@ -84,14 +84,14 @@ nsis:
   # Explicit (these are also electron-builder's defaults): uninstalling removes the app, not the
   # user's library database or settings under %APPDATA%.
   deleteAppDataOnUninstall: false
+  # No spaces: GitHub renames release files with spaces, which would break the names inside latest.yml.
+  artifactName: Nova-Player-Setup-${version}.exe
 
-# Explicitly no publish provider. Without this, electron-builder 26.15.3 tries to generate an
-# update-info file (latest.yml) from the git repository, finds none, and crashes AFTER the
-# installer is written ("Cannot read properties of null (reading 'provider')").
-publish: null
-
-# Deliberately absent: no publish provider. Per product decision 4, this
-# project does not ship a placeholder or permanently-failing update feed.
-# Auto-update is not implemented: `electron-updater` is NOT a dependency and
-# nothing in the main process checks for updates, so there is intentionally
-# nothing here for electron-builder to publish to.
+# Where the installed app looks for updates (electron-updater reads this at runtime from app-update.yml).
+# Free: GitHub Releases of a PUBLIC repo, no token needed. Builds run with `--publish never`; the workflow
+# attaches the installer, latest.yml and the .blockmap to the Release itself.
+publish:
+  provider: github
+  owner: FaizanKhokar-exe
+  repo: nova-player
+  releaseType: release

@@ -1,5 +1,6 @@
 import type { LyricsProvider, PlaybackApplication, PlaybackApplicationEvent, TrackSidecars } from '@nova/infrastructure';
-import type { IpcResult, PlaybackIpcContract } from '@nova/shared';
+import type { IpcResult, PlaybackIpcContract, UpdateStatusDto } from '@nova/shared';
+import type { UpdateService } from '../updater/update-service.js';
 import { toQueueDto } from './browse-dto-mappers.js';
 import {
   validateEnqueue,
@@ -41,6 +42,8 @@ export interface PlaybackIpcDependencies {
   /** A track's cover was attached or removed: cached thumbnails must forget which tracks have covers. */
   readonly onArtworkChanged: () => void;
   /** v0.15.0: store (or clear, with `undefined`) the listener's own names for a track. Returns false when the track is unknown. Main then tells the window to refresh. */
+  /** v0.15.2: app updates (absent in tests = unsupported). */
+  readonly updates?: UpdateService;
   readonly editTrackInfo?: (trackId: string, edit: { readonly title: string; readonly artist: string; readonly album?: string } | undefined) => 'done' | 'nothing' | 'unknown';
   /** v0.12.0: what the library knows about a track (to search by), or `undefined` for an unknown id. */
   readonly describeTrack: (trackId: string) => { readonly title: string; readonly artist: string; readonly album?: string; readonly durationSec?: number } | undefined;
@@ -62,7 +65,7 @@ type Value<K extends PlaybackChannel> = Extract<PlaybackIpcContract[K]['response
  * the domain, behind `PlaybackApplication`.
  */
 export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void {
-  const { registrar, application, sidecars, trimCover, pickLyricsFile, pickArtworkFile, onArtworkChanged, editTrackInfo, describeTrack, lyricsProvider, isTrustedSender, log } = dependencies;
+  const { registrar, application, sidecars, trimCover, pickLyricsFile, pickArtworkFile, onArtworkChanged, editTrackInfo, updates, describeTrack, lyricsProvider, isTrustedSender, log } = dependencies;
 
   function register<K extends PlaybackChannel, R>(
     channel: K,
@@ -177,6 +180,12 @@ export function registerPlaybackIpc(dependencies: PlaybackIpcDependencies): void
     const result = editTrackInfo?.(trackId, undefined) ?? 'unknown';
     return { outcome: result === 'done' ? ('reset' as const) : result === 'nothing' ? ('nothing-to-reset' as const) : ('unknown' as const) };
   });
+
+  const noUpdates: UpdateStatusDto = { state: 'unsupported', currentVersion: '0.0.0' };
+  register('update:getStatus', validateNoRequest, () => (updates?.getStatus() ?? noUpdates));
+  register('update:check', validateNoRequest, () => (updates?.check() ?? noUpdates));
+  register('update:download', validateNoRequest, () => (updates?.download() ?? noUpdates));
+  register('update:install', validateNoRequest, () => (updates?.install() ?? noUpdates));
 
   // v0.12.0 Lyric Studio. The search sends only the tags (or the listener's correction) of ONE known track.
   register('lyrics:search', validateLyricsSearch, async ({ trackId, title, artist }) => {

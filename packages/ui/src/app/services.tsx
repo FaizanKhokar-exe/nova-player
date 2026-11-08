@@ -15,6 +15,7 @@ import type { PrefsStoreApi, PrefsState } from '../prefs/prefs-store.js';
 import type { ThemeStoreApi } from '../theme/theme-store.js';
 import type { VisualBus } from '../visuals/visual-bus.js';
 import type { UiState, UiStoreApi } from './ui-store.js';
+import type { UpdateState, UpdateActions, UpdateStoreApi } from './update-store.js';
 
 /**
  * Everything the screens need, created ONCE by the renderer entry point and handed down through context. Components
@@ -35,6 +36,7 @@ export interface AppServices {
   readonly thumbnails: ThumbnailCache;
   readonly ui: UiStoreApi;
   readonly studio: StudioStoreApi;
+  readonly updates: UpdateStoreApi;
 }
 
 export const ServicesContext = createContext<AppServices | undefined>(undefined);
@@ -50,6 +52,9 @@ export function useUi<T>(selector: (state: UiState) => T): T {
 }
 export function usePrefs<T>(selector: (state: PrefsState) => T): T {
   return useStore(useServices().prefs, selector);
+}
+export function useUpdates<T>(selector: (state: UpdateState & UpdateActions) => T): T {
+  return useStore(useServices().updates, selector);
 }
 export function useAudioControls<T>(selector: (state: AudioControlsState) => T): T {
   return useStore(useServices().audioControls as StoreApi<AudioControlsState>, selector);

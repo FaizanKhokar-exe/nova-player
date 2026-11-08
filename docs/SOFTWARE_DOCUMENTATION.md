@@ -1,6 +1,6 @@
 # Nova Player 2 — Software Documentation
 
-Version 0.15.0 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
+Version 0.16.0 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
 
 > Honesty box: the app has been built and tested on **Linux (automated tests, a virtual display, synthetic audio)**. It has **not been run on a real Windows machine by a person**, the installer is **unsigned**, and **timing/beat quality on real music has never been measured** — only on synthetic signals. Sections marked ⚠ say where that matters.
 
@@ -31,6 +31,7 @@ Design goals: premium look (Spotify layout + Apple-Music lyrics + Lark-style lyr
 | Song info | Edit title/artist/album (stored beside the library, file untouched): Tidy up, Find the right name (online), Reset |
 | Equalizer | Also in the player bar (popover), same settings as Settings |
 | RTL lyrics | Urdu/Arabic/Persian/Hebrew lines align and wipe right-to-left automatically |
+| Updates | Settings → Updates: version, check, download, restart & update; automatic check once after launch (switchable); free via GitHub Releases |
 | Shortcuts | Customizable keys for 12 actions; fixed: arrows, digits, F11, `?`, Ctrl combos |
 | Desktop | Tray, media keys, notification on new track, remembered window, single instance, resume queue/position (paused) |
 
@@ -95,11 +96,11 @@ Space play/pause · N/P next/previous · M mute · S shuffle · R repeat · H fa
 
 ## 8. Privacy
 
-Local only. Network: (1) lyrics search to `lrclib.net` (host-pinned, HTTPS, no redirects, 8 s timeout, 4 MiB cap) **only after consent**; nothing else. Window is sandboxed, context-isolated, CSP restricted. A future update check would be the second network use (planned, switchable).
+Local only. Network: (1) lyrics search to `lrclib.net` (host-pinned, HTTPS, no redirects, 8 s timeout, 4 MiB cap) **only after consent**; nothing else. Window is sandboxed, context-isolated, CSP restricted. (2) the update check: after launch (switchable in Settings → Updates) the app asks GitHub Releases for `latest.yml`; nothing about you or your library is sent. Downloads happen only on click.
 
 ## 9. Known gaps / honest list
 
-1. Not verified on real Windows; unsigned (SmartScreen warning). 2. Audible output never confirmed by a human. 3. Lyric timing and beat quality only validated on synthetic signals. 4. No auto-update, no Help/FAQ/About, no first-run welcome. 5. No mood-from-music (energy/tempo) — mood comes from cover colours only. 6. Lyrics only from `.lrc`/online search, not embedded tags. 7. Single window, English UI only. 8. Moving/renaming a file makes a new track identity. 9. Closing the window quits (tray-hide is opt-in, no UI).
+1. Not verified on real Windows; unsigned (SmartScreen warning). 2. Audible output never confirmed by a human. 3. Lyric timing and beat quality only validated on synthetic signals. 4. Auto-update is built but untested against a real release; no Help/FAQ/About, no first-run welcome. 5. No mood-from-music (energy/tempo) — mood comes from cover colours only. 6. Lyrics only from `.lrc`/online search, not embedded tags. 7. Single window, English UI only. 8. Moving/renaming a file makes a new track identity. 9. Closing the window quits (tray-hide is opt-in, no UI).
 
 ## 10. Options for the future (to discuss)
 
@@ -123,5 +124,7 @@ Local only. Network: (1) lyrics search to `lrclib.net` (host-pinned, HTTPS, no r
 | Last.fm scrobbling | social | S–M | needs account/keys |
 
 ## 11. Version history (short)
+
+0.16 online updates (electron-updater + GitHub Releases), HUD no longer flashes “pause” when a song changes.
 
 0.11 spectrum/beat · 0.12 Lyric Studio · 0.13 styles, shortcuts, fades · 0.14 mood themes · **0.15** magnet removed + "Sung lines", reactive volume/action HUD, premium Karaoke wipe, beat detector for quiet/phone tracks, Studio markers + stereo-centre analysis, this document.

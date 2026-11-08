@@ -1,3 +1,4 @@
+import { createUpdateStore } from './update-store.js';
 import type { NovaBridge } from '@nova/shared';
 import { createAudioControls, type AudioElementLike } from '../audio/audio-controls.js';
 import { createAudioEngine } from '../audio/audio-engine.js';
@@ -45,5 +46,6 @@ export function createAppServices(bridge: NovaBridge, audio: AudioLike & AudioEl
     thumbnails: createThumbnailCache(bridge),
     ui: createUiStore(),
     studio,
+    updates: createUpdateStore(bridge),
   };
 }

@@ -127,12 +127,12 @@ beforeEach(() => {
 
 // Phase 11 deliberately moved these two to registerCollectionsIpc (they need the collections / thumbnail services); the pinned list here follows, the count stays 20.
 const COLLECTIONS_OWNED: readonly string[] = ['playback:playList', 'track:getThumbnail'];
-const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playback:') || c.startsWith('track:') || c.startsWith('lyrics:')) && !COLLECTIONS_OWNED.includes(c));
+const PLAYBACK_CHANNELS = IPC_INVOKE_CHANNELS.filter((c) => (c.startsWith('playback:') || c.startsWith('track:') || c.startsWith('lyrics:') || c.startsWith('update:')) && !COLLECTIONS_OWNED.includes(c));
 
 describe('registration', () => {
   it('registers exactly the playback channels in the contract, once each', () => {
     expect([...h.handlers.keys()].sort()).toEqual([...PLAYBACK_CHANNELS].sort());
-    expect(PLAYBACK_CHANNELS).toHaveLength(26); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork; v0.12.0 lyrics:search / lyrics:save; v0.15.0 track:editInfo / resetInfo
+    expect(PLAYBACK_CHANNELS).toHaveLength(30); // 18 until Phase 10 added track:attachLyrics / detachLyrics; v0.11.3 added track:attachArtwork / detachArtwork; v0.12.0 lyrics:search / lyrics:save; v0.15.0 track:editInfo / resetInfo; v0.15.2 update:getStatus / check / download / install
   });
 
   it('refuses every channel for an untrusted sender, before validating or running anything', async () => {
@@ -534,5 +534,14 @@ describe('v0.15.0: track:editInfo and track:resetInfo', () => {
     expect(await h.call('track:resetInfo', { trackId })).toEqual({ ok: true, value: { outcome: 'reset' } });
     expect(h.edits[0]).toEqual({ id: trackId, edit: undefined });
     expect(await h.call('track:resetInfo', { trackId: '123e4567-e89b-42d3-a456-426614174000' })).toEqual({ ok: true, value: { outcome: 'unknown' } });
+  });
+});
+
+describe('v0.15.2: update channels', () => {
+  it('say "unsupported" when this build cannot update itself (no updater given)', async () => {
+    for (const channel of ['update:getStatus', 'update:check', 'update:download', 'update:install'] as const) {
+      expect(await h.call(channel, undefined)).toEqual({ ok: true, value: { state: 'unsupported', currentVersion: '0.0.0' } });
+    }
+    expect(await h.call('update:check', { x: 1 })).toMatchObject({ ok: false, error: { code: 'invalid-request' } });
   });
 });

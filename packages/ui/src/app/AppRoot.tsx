@@ -59,6 +59,7 @@ function RouteView({ route }: { route: Route }) {
 }
 
 export const IDLE_CURSOR_MS = 2500;
+export const UPDATE_CHECK_DELAY_MS = 8_000;
 
 /** Window fullscreen through the page itself (Electron maps the standard Fullscreen API onto the window): no extra IPC. */
 function toggleFullscreen(): void {
@@ -73,7 +74,7 @@ const isTyping = (target: EventTarget | null): boolean => {
 
 /** Global effects: engine + visuals follow playback, preferences, shortcuts. Renders nothing. */
 function AppEffects() {
-  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs, nowPlaying, studio } = useServices();
+  const { engine, visuals, audioControls, collections, wallpaper, playback, ui, prefs, nowPlaying, studio, updates } = useServices();
   const playing = usePlaybackStore((s) => s.engine.playing);
   const performance = usePrefs((s) => s.performance);
 
@@ -83,6 +84,12 @@ function AppEffects() {
   }, [collections, wallpaper]);
   useEffect(() => { visuals.setPlaying(playing); if (playing) audioControls.getState().activateEngine(); }, [playing, visuals, audioControls, engine]);
   useEffect(() => { visuals.setMode(performance); }, [performance, visuals]);
+  // One quiet look for a newer version a few seconds after launch (only when the person left it switched on).
+  useEffect(() => {
+    if (!prefs.getState().autoUpdateCheck) return undefined;
+    const timer = setTimeout(() => { void updates.getState().checkQuietly(); }, UPDATE_CHECK_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [prefs, updates]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {

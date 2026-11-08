@@ -771,3 +771,16 @@ test('equalizer opens from the player bar, and a song name can be corrected and 
   await expect(window.getByTestId('player-title')).toHaveText('Alpha');
   await app.close();
 });
+
+test('settings: the Updates section shows the version; a development run reports that updates need the installed app', async () => {
+  const { app, window } = await openApp();
+  await window.getByTestId('nav-settings').click();
+  const status = window.getByTestId('update-status');
+  await expect(status).toHaveAttribute('data-state', 'unsupported');
+  await expect(window.getByRole('button', { name: 'Check for updates' })).toBeDisabled();
+  const auto = window.getByRole('switch', { name: 'Check for updates automatically' });
+  await expect(auto).toHaveAttribute('aria-checked', 'true');
+  await auto.click();
+  await expect(auto).toHaveAttribute('aria-checked', 'false');
+  await app.close();
+});

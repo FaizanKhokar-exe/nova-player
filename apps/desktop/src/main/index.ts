@@ -2,6 +2,8 @@ import { app, BrowserWindow, dialog, ipcMain, net, type IpcMainInvokeEvent, type
 import path from 'node:path';
 import fsPromises from 'node:fs/promises';
 import { parseTrackId } from '@nova/domain';
+import electronUpdater from 'electron-updater';
+import { createUpdateService, type UpdaterPort } from './updater/update-service.js';
 import fsSync from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { PLAYLIST_LIMITS, WALLPAPER_LIMITS } from '@nova/shared';
@@ -377,6 +379,8 @@ function startApplication(): void {
   });
   bridgeApplicationEvents(libraryApplication, publishToRenderers);
 
+  // v0.15.2: updates come from GitHub Releases through electron-updater, and only for an INSTALLED app (never in development).
+  const updateService = createUpdateService({ updater: app.isPackaged ? installedUpdater() : undefined, currentVersion: app.getVersion() });
   registerPlaybackIpc({
     registrar: { handle: (channel, listener) => ipcMain.handle(channel, (event, request: unknown) => listener(event, request)) },
     application: playbackApplication,
@@ -385,6 +389,7 @@ function startApplication(): void {
     pickLyricsFile,
     pickArtworkFile,
     onArtworkChanged: () => trackThumbnails.invalidate(),
+    updates: updateService,
     editTrackInfo: (trackId, edit) => {
       const edits = libraryServices?.trackEdits;
       const id = parseTrackId(trackId);
@@ -526,3 +531,13 @@ app.on('before-quit', (event) => {
   appShell?.dispose();
   shutdownCoordinator.onBeforeQuit(event);
 });
+
+/** `electron-updater` set up the careful way: nothing downloads by itself, and the finished download installs when the app is quit. */
+function installedUpdater(): UpdaterPort {
+  const { autoUpdater } = electronUpdater;
+  autoUpdater.autoDownload = false;
+  autoUpdater.autoInstallOnAppQuit = true;
+  autoUpdater.allowPrerelease = false;
+  autoUpdater.logger = null;
+  return autoUpdater as unknown as UpdaterPort;
+}
