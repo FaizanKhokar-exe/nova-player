@@ -21,6 +21,24 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Some tests load the real Electron binary. GitHub's download server sometimes answers 504 for a moment,
+      # so fetch it up front: cached, and retried up to 5 times.
+      - name: Cache the Electron download
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-dl-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-dl-${{ runner.os }}-
+
+      - name: Fetch the Electron binary (with retries)
+        run: |
+          for i in 1 2 3 4 5; do
+            npx install-electron && exit 0
+            echo "Download failed (attempt $i of 5), waiting before retrying..."
+            sleep $((20 * i))
+          done
+          exit 1
+
       - name: Lint
         run: pnpm run lint
 
@@ -44,6 +62,23 @@ jobs:
           node-version: 22
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
+      # Some tests load the real Electron binary. GitHub's download server sometimes answers 504 for a moment,
+      # so fetch it up front: cached, and retried up to 5 times.
+      - name: Cache the Electron download
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/electron
+          key: electron-dl-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: electron-dl-${{ runner.os }}-
+
+      - name: Fetch the Electron binary (with retries)
+        run: |
+          for i in 1 2 3 4 5; do
+            npx install-electron && exit 0
+            echo "Download failed (attempt $i of 5), waiting before retrying..."
+            sleep $((20 * i))
+          done
+          exit 1
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm --filter @nova/desktop run build
       - run: xvfb-run -a pnpm exec playwright test
