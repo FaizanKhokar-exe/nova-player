@@ -8,8 +8,6 @@ export type HudState =
   | { readonly kind: 'action'; readonly seq: number; readonly icon: IconName; readonly label: string; readonly on: boolean };
 
 const SHOW_MS = 1500;
-/** A play / pause flip this soon after a song loaded or changed is the player moving on, not the listener. */
-const TRACK_SETTLE_MS = 1200;
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 
 /** Three arcs: more of them light up as the volume rises, so the speaker itself says how loud it is. */
@@ -48,20 +46,21 @@ export function Hud() {
       timer = setTimeout(() => setVisible(false), SHOW_MS); // the content stays, so the card can fade out instead of vanishing
     };
     let last = playback.getState();
-    // When a song ends and the next one loads, `playing` flips (false, then true) by itself. That is the player changing track, not
-    // the listener pressing pause, so play/pause is only confirmed once things have been settled for a moment.
-    let lastTransition = Date.now();
     let lastSpeed = prefs.getState().speed;
     const offPlayback = playback.subscribe((state) => {
       const before = last;
       last = state;
       const e = state.engine;
       const b = before.engine;
-      if (e.loaded !== b.loaded || e.buffering !== b.buffering || state.session?.current !== before.session?.current || e.durationMs !== b.durationMs) lastTransition = Date.now();
-      const draggingSlider = document.activeElement instanceof HTMLElement && document.activeElement.classList.contains('nx-volume');
+      // While the pointer is held on the volume slider the slider itself shows the value; every other change (keys, wheel, mute,
+      // a slider moved with the keyboard) is announced, in both directions.
+      const draggingSlider = document.querySelector('.nx-volume:active') !== null;
       if (e.volume !== b.volume && !draggingSlider) show({ kind: 'volume', level: e.volume, muted: e.muted, delta: e.volume - b.volume });
       else if (e.muted !== b.muted) show({ kind: 'volume', level: e.volume, muted: e.muted, delta: 0 });
-      else if (e.playing !== b.playing && e.loaded && b.loaded && !e.buffering && Date.now() - lastTransition > TRACK_SETTLE_MS) show({ kind: 'action', icon: e.playing ? 'play' : 'pause', label: e.playing ? 'Play' : 'Pause', on: e.playing });
+      else if (state.volumeLimitHits !== before.volumeLimitHits && !draggingSlider) show({ kind: 'volume', level: e.volume, muted: e.muted, delta: 0 });
+      // Play / pause is announced only when the listener did it: not while a source is loading, not when the track changed, and not
+      // when the song simply played to its end (the element reports `pause` just before `ended`).
+      else if (e.playing !== b.playing && e.loaded && b.loaded && !e.buffering && state.session?.current === before.session?.current && !(e.ended && !e.playing)) show({ kind: 'action', icon: e.playing ? 'play' : 'pause', label: e.playing ? 'Play' : 'Pause', on: e.playing });
       const s = state.session;
       const o = before.session;
       if (s !== undefined && o !== undefined) {

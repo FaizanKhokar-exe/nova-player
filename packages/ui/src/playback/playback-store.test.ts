@@ -66,7 +66,8 @@ describe('connecting', () => {
       session: undefined,
       error: undefined,
       notice: undefined,
-      engine: { loaded: false, playing: false, buffering: false, durationMs: undefined, volume: 1, muted: false },
+      engine: { loaded: false, playing: false, buffering: false, ended: false, durationMs: undefined, volume: 1, muted: false },
+      volumeLimitHits: 0,
     });
     expect(position()).toBe(0);
   });
@@ -528,6 +529,28 @@ describe('volume and mute (the element is the source of truth)', () => {
     expect(fakes.audio.volume).toBe(1);
   });
 
+  it('a request that hits a limit is counted (the element fires no event for it); ordinary changes and repeats are not', () => {
+    expect(state().volumeLimitHits).toBe(0);
+    state().setVolume(1); // already at 100 %
+    expect(state().volumeLimitHits).toBe(1);
+    state().setVolume(0.6);
+    fakes.audio.simVolumeChanged();
+    state().setVolume(0.6); // same level again, not a limit
+    expect(state().volumeLimitHits).toBe(1);
+    state().setVolume(0);
+    fakes.audio.simVolumeChanged();
+    state().setVolume(0); // already at 0 %
+    expect(state().volumeLimitHits).toBe(2);
+  });
+
+  it('raising the volume while muted is a real change (it un-mutes), not a limit hit', () => {
+    state().toggleMute();
+    fakes.audio.simVolumeChanged();
+    state().setVolume(1);
+    expect(fakes.audio.muted).toBe(false);
+    expect(state().volumeLimitHits).toBe(0);
+  });
+
   it('toggleMute flips the element and the store follows', () => {
     state().toggleMute();
     expect(fakes.audio.muted).toBe(true);
@@ -587,6 +610,58 @@ describe('a track ending: main decides what happens next (Phase 1 domain rules, 
     await flush();
     expect(position()).toBe(0);
     expect(state().engine).toMatchObject({ playing: true, buffering: true, loaded: false });
+  });
+
+  it('regression: the `pause` the browser raises at the end of a song is marked as the song ending, and cleared by the next source', async () => {
+    fakes.bridge.on('playback:trackFinished', () => command('started', playbackState({ current: B, revision: 3 })));
+    const seen: Array<{ playing: boolean; ended: boolean }> = [];
+    const off = store.subscribe((s) => seen.push({ playing: s.engine.playing, ended: s.engine.ended }));
+    fakes.audio.simEnded();
+    expect(seen[0]).toEqual({ playing: true, ended: true }); // the very first thing anyone can observe: it ended - but it has NOT 'stopped' yet
+    await flush();
+    off();
+    expect(state().engine).toMatchObject({ ended: false, playing: true, loaded: false }); // the next track took over
+  });
+
+  it('regression: repeat-one by main (restart) never reports "stopped" in between - no Pause / Play flash', async () => {
+    fakes.bridge.on('playback:trackFinished', () => command('restart', playbackState({ current: A, revision: 3, repeatMode: 'one' })));
+    const playing: boolean[] = [];
+    const off = store.subscribe((s) => playing.push(s.engine.playing));
+    fakes.audio.simEnded();
+    await flush();
+    off();
+    expect(playing).not.toContain(false);
+    expect(state().engine).toMatchObject({ playing: true, ended: false });
+  });
+
+  it('when main says "stop" or answers with an error, the player does report stopped', async () => {
+    fakes.bridge.on('playback:trackFinished', () => command('stop', playbackState({ current: A, revision: 3, canNext: false })));
+    fakes.audio.simEnded();
+    await flush();
+    expect(state().engine).toMatchObject({ playing: false, ended: true });
+  });
+
+  it('regression: pressing pause is NOT marked as an ending, and playing again clears the mark', async () => {
+    fakes.audio.pause();
+    expect(state().engine).toMatchObject({ playing: false, ended: false });
+    fakes.bridge.on('playback:trackFinished', () => command('stop', playbackState({ current: A, revision: 3, canNext: false })));
+    fakes.audio.simEnded();
+    await flush();
+    expect(state().engine.ended).toBe(true); // the queue is over: it stays marked until the listener plays again
+    void fakes.audio.play();
+    expect(state().engine).toMatchObject({ playing: true, ended: false });
+  });
+
+  it('regression: repeat-one while held never reports the player as stopped (no pause / play flicker)', async () => {
+    state().setHoldTrack(true);
+    const playing: boolean[] = [];
+    const off = store.subscribe((s) => playing.push(s.engine.playing));
+    fakes.audio.simEnded();
+    await flush();
+    off();
+    expect(playing).not.toContain(false);
+    expect(state().engine.playing).toBe(true);
+    state().setHoldTrack(false);
   });
 
   it('"restart" (repeat one): the SAME source plays again from 0, without reloading', async () => {

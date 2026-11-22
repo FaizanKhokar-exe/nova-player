@@ -1,6 +1,6 @@
 # Nova Player 2 — Software Documentation
 
-Version 0.16.0 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
+Version 0.16.1 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
 
 > Honesty box: the app has been built and tested on **Linux (automated tests, a virtual display, synthetic audio)**. It has **not been run on a real Windows machine by a person**, the installer is **unsigned**, and **timing/beat quality on real music has never been measured** — only on synthetic signals. Sections marked ⚠ say where that matters.
 
@@ -125,6 +125,6 @@ Local only. Network: (1) lyrics search to `lrclib.net` (host-pinned, HTTPS, no r
 
 ## 11. Version history (short)
 
-0.16 online updates (electron-updater + GitHub Releases), HUD no longer flashes “pause” when a song changes.
+0.16.1 HUD reliability (a song ending / repeat-one no longer flashes Pause or Play; volume HUD in both directions and at the limits, also while the slider has focus), softer beat (pulse follows hit strength, slower release, gentler cover/glow), Lyric Studio: edit words in place (double-click / F2), duplicate, merge, shift-from-here, lock all, next-to-check, 0.75× speed. · 0.16 online updates (electron-updater + GitHub Releases), HUD no longer flashes “pause” when a song changes.
 
 0.11 spectrum/beat · 0.12 Lyric Studio · 0.13 styles, shortcuts, fades · 0.14 mood themes · **0.15** magnet removed + "Sung lines", reactive volume/action HUD, premium Karaoke wipe, beat detector for quiet/phone tracks, Studio markers + stereo-centre analysis, this document.

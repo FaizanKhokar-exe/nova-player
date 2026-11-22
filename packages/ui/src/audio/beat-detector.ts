@@ -56,7 +56,7 @@ const PEAK_FRAMES = 240;
 
 export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnalyzer {
   const sensitivity = options.sensitivity ?? 1.16;
-  const minGapMs = options.minGapMs ?? 170;
+  const minGapMs = options.minGapMs ?? 230;
   const floor = options.floor ?? 0.1;
   const window = Math.max(2, options.averageFrames ?? 30);
 
@@ -105,7 +105,7 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
 
       const dt = lastMs === undefined ? 16 : Math.max(0, Math.min(100, nowMs - lastMs));
       lastMs = nowMs;
-      pulse = Math.max(0, pulse - dt / 340);
+      pulse = Math.max(0, pulse - dt / 480);
 
       let beat = false;
       // The first frames only teach the average what this track sounds like; nothing can be "above" an average yet.
@@ -118,7 +118,11 @@ export function createBeatAnalyzer(options: BeatAnalyzerOptions = {}): BeatAnaly
       if (frames > 10 && peak > SILENCE && (kick || snare || hit) && nowMs - lastBeatMs >= minGapMs) {
         beat = true;
         lastBeatMs = nowMs;
-        pulse = 0.85;
+        // A soft hit gives a soft pulse and a hard hit a strong one (how far it rose above what this track normally does), instead of
+        // every hit being the same full-size flash. Never below what it was already showing, so a quick second hit does not dip.
+        const over = Math.max(kick ? rawBass / Math.max(1e-3, average * sensitivity) : 0, snare ? rawMid / Math.max(1e-3, midAverage * (sensitivity + 0.22)) : 0, hit ? rawFlux / Math.max(1e-3, fluxAverage * (sensitivity + 0.9)) : 0);
+        const strength = Math.max(0, Math.min(1, (over - 1) * 2.5));
+        pulse = Math.max(pulse, 0.4 + 0.45 * strength);
       }
       // Rises quickly (a new loud passage becomes the reference within a few frames), falls slowly.
       average += (rawBass - average) / (rawBass > average ? 8 : window);

@@ -381,7 +381,7 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 .nx-np-art { position: absolute; inset: -18%; background-size: cover; background-position: center; filter: blur(70px) saturate(1.7) brightness(0.78); transform: translateZ(0) scale(1.1); transition: opacity 700ms var(--ease-out); }
 .nx-np-art--fallback { background: radial-gradient(60% 60% at 25% 30%, rgba(var(--accent-primary-rgb), 0.85), transparent 70%), radial-gradient(55% 55% at 80% 75%, rgba(var(--accent-secondary-rgb), 0.8), transparent 70%), rgb(var(--accent-deep-rgb)); filter: none; }
 .nx-np-vignette { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.05) 30%, rgba(0,0,0,.45) 100%); }
-.nx-np-pulse { position: absolute; inset: 0; background: radial-gradient(50% 50% at 28% 50%, rgba(var(--accent-highlight-rgb), 0.34), transparent 70%); mix-blend-mode: screen; opacity: var(--beat); will-change: opacity; } /* v0.11.3: the beat fades a fixed gradient (compositor-only) instead of repainting a new one every frame: same look */
+.nx-np-pulse { position: absolute; inset: 0; background: radial-gradient(50% 50% at 28% 50%, rgba(var(--accent-highlight-rgb), 0.26), transparent 70%); mix-blend-mode: screen; opacity: var(--beat); will-change: opacity; } /* v0.11.3: the beat fades a fixed gradient (compositor-only) instead of repainting a new one every frame: same look */
 .nx-np-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .nx-np-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 26px; }
 .nx-np-modes { display: inline-flex; padding: 4px; border-radius: var(--r-pill); background: rgba(255,255,255,.12); backdrop-filter: blur(14px); gap: 2px; }
@@ -394,7 +394,7 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 .nx-np[data-layout='lyrics'] .nx-np-stage { grid-template-columns: minmax(260px, 0.62fr) minmax(0, 1.5fr); }
 .nx-np[data-layout='art'] .nx-np-stage { grid-template-columns: minmax(0, 1fr); justify-items: center; }
 .nx-np-left { display: flex; flex-direction: column; gap: 16px; align-items: stretch; max-width: 460px; width: 100%; justify-self: center; }
-.nx-np-cover { width: min(100%, max(180px, calc(100vh - 470px))); align-self: center; aspect-ratio: 1; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55); transform: scale(calc(1 + var(--beat) * 0.018)); transition: transform 90ms linear; background: rgba(255,255,255,.08); }
+.nx-np-cover { width: min(100%, max(180px, calc(100vh - 470px))); align-self: center; aspect-ratio: 1; border-radius: 18px; overflow: hidden; box-shadow: 0 30px 80px rgba(0,0,0,.55); transform: scale(calc(1 + var(--beat) * 0.012)); background: rgba(255,255,255,.08); }
 .nx-np[data-layout='lyrics'] .nx-np-cover { width: min(100%, 300px); }
 .nx-np-cover .nx-cover { width: 100%; height: 100%; border-radius: 0; }
 .nx-np-title { font-family: var(--font-display); font-weight: 800; font-size: clamp(22px, 2.4vw, 32px); letter-spacing: -0.5px; line-height: 1.2; }
@@ -604,6 +604,8 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 .nx-srow-time b { font-family: var(--font-mono); font-size: 13px; min-width: 70px; text-align: center; font-variant-numeric: tabular-nums; }
 .nx-srow-text { flex: 1; min-width: 0; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .nx-srow[data-current='true'] .nx-srow-text { color: var(--accent-highlight); font-weight: 700; }
+.nx-srow-edit { flex: 1; min-width: 0; height: 32px; font-size: 15px; padding: 0 10px; }
+.nx-srow-text { cursor: text; }
 .nx-srow-flag { flex: none; font-size: 11px; font-weight: 800; letter-spacing: 0.4px; text-transform: uppercase; padding: 2px 8px; border-radius: var(--r-pill); background: rgba(251, 191, 36, 0.16); color: var(--warn); }
 .nx-srow-lock[data-on='true'] { background: rgba(var(--accent-primary-rgb), 0.3); color: var(--accent-primary); }
 @media (max-width: 900px) { .nx-studio-source { grid-template-columns: 1fr; } .nx-studio-query { grid-template-columns: 1fr; } }

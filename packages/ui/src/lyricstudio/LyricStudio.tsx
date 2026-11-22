@@ -115,10 +115,12 @@ function SourceStep() {
 
 /* ------------------------------------------------------------------ timing step ------------------------------------------------------------------ */
 
-const Row = memo(function Row({ index, text, timeMs, confidence, locked, selected, current, onSelect, onNudge, onLock, onAudition }: {
-  index: number; text: string; timeMs: number; confidence: number; locked: boolean; selected: boolean; current: boolean;
+const Row = memo(function Row({ index, text, timeMs, confidence, locked, selected, current, editing, onSelect, onNudge, onLock, onAudition, onStartEdit, onCommit, onCancel }: {
+  index: number; text: string; timeMs: number; confidence: number; locked: boolean; selected: boolean; current: boolean; editing: boolean;
   onSelect: (i: number) => void; onNudge: (i: number, delta: number) => void; onLock: (i: number) => void; onAudition: (i: number) => void;
+  onStartEdit: (i: number) => void; onCommit: (i: number, text: string) => void; onCancel: () => void;
 }) {
+  const done = useRef(false); // Enter / Escape already decided: the blur that follows must not decide again
   const low = !locked && confidence < LOW_CONFIDENCE;
   return (
     <li className="nx-srow" data-index={index} data-selected={selected ? 'true' : 'false'} data-current={current ? 'true' : 'false'} data-low={low ? 'true' : 'false'} data-locked={locked ? 'true' : 'false'} data-testid="studio-row" onClick={() => onSelect(index)}>
@@ -128,7 +130,26 @@ const Row = memo(function Row({ index, text, timeMs, confidence, locked, selecte
         <b data-testid="studio-time">{formatLrcTime(timeMs)}</b>
         <button type="button" aria-label="Later by 0.1 s" data-no-tip onClick={(e) => { e.stopPropagation(); onNudge(index, 100); }}><Icon name="chevronRight" size={13} /></button>
       </span>
-      <span className="nx-srow-text" dir="auto">{text}</span>
+      {editing ? (
+        <input
+          className="nx-input nx-srow-edit"
+          data-studio-edit
+          data-testid="studio-row-edit"
+          dir="auto"
+          autoFocus
+          defaultValue={text}
+          aria-label={`Words of line ${index + 1}`}
+          onClick={(e) => e.stopPropagation()}
+          onFocus={(e) => e.currentTarget.select()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); done.current = true; onCommit(index, e.currentTarget.value); }
+            else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done.current = true; onCancel(); }
+          }}
+          onBlur={(e) => { if (!done.current) onCommit(index, e.currentTarget.value); }}
+        />
+      ) : (
+        <span className="nx-srow-text" dir="auto" data-tip="Double-click to edit the words (F2)" onDoubleClick={(e) => { e.stopPropagation(); onStartEdit(index); }}>{text}</span>
+      )}
       {low && <span className="nx-srow-flag" data-tip="Not sure about this one - listen and fix it">check</span>}
       <button type="button" className="nx-srow-lock" data-on={locked ? 'true' : 'false'} aria-pressed={locked} aria-label={locked ? 'Unlock this line (it may move when re-estimating)' : 'Lock this line in place'} data-tip={locked ? 'Locked (L)' : 'Lock (L)'} onClick={(e) => { e.stopPropagation(); onLock(index); }}>
         <Icon name={locked ? 'check' : 'plus'} size={13} />
@@ -202,18 +223,25 @@ function TimingStep() {
   const playing = usePlaybackStore((s) => s.engine.playing);
   const [currentIndex, setCurrentIndex] = useState(-1);
   const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState<number | undefined>(undefined);
+  const { prefs } = useServices();
+  const speed = usePrefs((s) => s.speed);
   const list = useRef<HTMLUListElement | null>(null);
   const api = studio.getState();
 
   // The line being sung right now follows the exact playhead. Only a CHANGE of line re-renders (long lyrics stay light).
   useEffect(() => {
     const timer = setInterval(() => {
+      if (document.hidden) return; // nobody is looking: do not wake the renderer for nothing
       const now = playback.getState().livePositionMs();
       const all = studio.getState().times;
+      // the times are in order: binary search for the last line that has started
+      let low = 0;
+      let high = all.length - 1;
       let index = -1;
-      for (let i = 0; i < all.length; i += 1) {
-        if ((all[i] ?? 0) <= now) index = i;
-        else break;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        if ((all[mid] ?? 0) <= now) { index = mid; low = mid + 1; } else high = mid - 1;
       }
       setCurrentIndex((previous) => (previous === index ? previous : index));
     }, 80);
@@ -230,6 +258,21 @@ function TimingStep() {
   const onNudge = useCallback((i: number, d: number) => studio.getState().nudge(i, d), [studio]);
   const onLock = useCallback((i: number) => studio.getState().toggleLock(i), [studio]);
   const onAudition = useCallback((i: number) => studio.getState().audition(i), [studio]);
+  const onStartEdit = useCallback((i: number) => { studio.getState().select(i); setEditing(i); }, [studio]);
+  const onCancel = useCallback(() => setEditing(undefined), []);
+  const onCommit = useCallback((i: number, text: string) => { studio.getState().editLine(i, text); setEditing(undefined); }, [studio]);
+
+  // F2 edits the words of the selected line (like a spreadsheet cell).
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent): void => {
+      if (event.key !== 'F2' || isTyping(event.target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setEditing(studio.getState().selected);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [studio]);
 
   return (
     <div className="nx-studio-timing">
@@ -261,14 +304,33 @@ function TimingStep() {
         <button type="button" className="nx-btn" disabled={draft.trim() === ''} data-testid="studio-replace" data-tip="Use these words for the selected line (its time stays)" onClick={() => { api.editLine(selected, draft); setDraft(''); }}>Replace words</button>
         <button type="button" className="nx-btn" disabled={lines.length <= 1} data-testid="studio-remove" onClick={() => api.removeLine(selected)}><Icon name="trash" size={14} /> Remove line {selected + 1}</button>
       </div>
+      <div className="nx-studio-linetools" data-testid="studio-linetools-2" role="group" aria-label="Tools for the selected line and for all lines">
+        <button type="button" className="nx-btn" data-testid="studio-edit-text" data-tip="Change the words of the selected line (F2, or double-click it)" onClick={() => onStartEdit(selected)}><Icon name="edit" size={14} /> Edit words</button>
+        <button type="button" className="nx-btn" data-testid="studio-duplicate" data-tip="Repeat this line right after itself (a chorus that comes twice)" onClick={() => api.insertLine(selected, lines[selected]?.text ?? '')}>Duplicate</button>
+        <button type="button" className="nx-btn" data-testid="studio-merge" disabled={selected >= lines.length - 1} data-tip="Join the selected line with the next one" onClick={() => api.mergeWithNext(selected)}>Merge with next</button>
+        <span className="nx-studio-shift" role="group" aria-label="Move this line and the ones after it">
+          <button type="button" className="nx-btn" data-testid="studio-from-earlier" data-tip="This line and everything after it, 0.5 s earlier" onClick={() => api.shiftFrom(selected, -500)}>From here −0.5 s</button>
+          <button type="button" className="nx-btn" data-testid="studio-from-later" data-tip="This line and everything after it, 0.5 s later" onClick={() => api.shiftFrom(selected, 500)}>+0.5 s</button>
+        </span>
+        <button type="button" className="nx-btn" data-testid="studio-next-check" disabled={lowCount === 0} data-tip="Jump to the next line the app is unsure about" onClick={() => { if (api.nextToCheck()) api.audition(studio.getState().selected); }}>Next to check{lowCount > 0 ? ` (${lowCount})` : ''}</button>
+        <span className="nx-studio-shift" role="group" aria-label="Locks">
+          <button type="button" className="nx-btn" data-testid="studio-lock-all" data-tip="Keep every line where it is when you estimate again" onClick={() => api.lockAll(true)}>Lock all</button>
+          <button type="button" className="nx-btn" data-testid="studio-unlock-all" onClick={() => api.lockAll(false)}>Unlock all</button>
+        </span>
+        <span className="nx-studio-shift" role="group" aria-label="Playback speed while you stamp">
+          {[0.75, 1].map((v) => (
+            <button key={v} type="button" className="nx-btn" aria-pressed={speed === v} data-testid={`studio-speed-${v}`} data-tip={v === 1 ? 'Normal speed' : 'Slower, so it is easier to hit the start of a line'} onClick={() => prefs.getState().setSpeed(v)}>{v}×</button>
+          ))}
+        </span>
+      </div>
       <p className="nx-studio-keys">
-        <kbd>Space</kbd> play/pause · <kbd>Enter</kbd> stamp the selected line as it begins · <kbd>↑</kbd><kbd>↓</kbd> select · <kbd>←</kbd><kbd>→</kbd> nudge 0.1 s (<kbd>Shift</kbd> 0.5 s) · <kbd>A</kbd> hear it · <kbd>L</kbd> lock · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
+        <kbd>Space</kbd> play/pause · <kbd>Enter</kbd> stamp the selected line as it begins · <kbd>↑</kbd><kbd>↓</kbd> select · <kbd>←</kbd><kbd>→</kbd> nudge 0.1 s (<kbd>Shift</kbd> 0.5 s) · <kbd>F2</kbd> edit words · <kbd>A</kbd> hear it · <kbd>L</kbd> lock · <kbd>Ctrl</kbd>+<kbd>Z</kbd> undo
         {lowCount > 0 && <b data-testid="studio-low-count"> · {lowCount} {lowCount === 1 ? 'line' : 'lines'} to check</b>}
       </p>
       {save.message !== undefined && <p className="nx-studio-result" role="status" data-status={save.status} data-testid="studio-save-result">{save.message}</p>}
       <ul className="nx-srows" ref={list} data-testid="studio-rows">
         {lines.map((line, i) => (
-          <Row key={i} index={i} text={line.text} timeMs={times[i] ?? 0} confidence={confidence[i] ?? 0} locked={locks.has(i)} selected={i === selected} current={i === currentIndex} onSelect={onSelect} onNudge={onNudge} onLock={onLock} onAudition={onAudition} />
+          <Row key={i} index={i} text={line.text} timeMs={times[i] ?? 0} confidence={confidence[i] ?? 0} locked={locks.has(i)} selected={i === selected} current={i === currentIndex} editing={editing === i} onStartEdit={onStartEdit} onCommit={onCommit} onCancel={onCancel} onSelect={onSelect} onNudge={onNudge} onLock={onLock} onAudition={onAudition} />
         ))}
       </ul>
     </div>
@@ -298,6 +360,7 @@ export function LyricStudio() {
     const onKey = (event: KeyboardEvent): void => {
       const s = studio.getState();
       if (event.key === 'Escape') {
+        if ((event.target as HTMLElement | null)?.closest('[data-studio-edit]') != null) return; // the row editor cancels itself
         event.preventDefault();
         event.stopPropagation();
         if (confirmClose) setConfirmClose(false);

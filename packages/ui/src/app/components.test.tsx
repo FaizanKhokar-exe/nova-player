@@ -121,24 +121,93 @@ describe('Hud', () => {
     act(() => store.setState({ engine: { volume: 0.2, muted: true, playing: false, loaded: false } } as never));
     expect(screen.getByTestId('hud-volume')).toHaveTextContent('Muted');
   });
-  it('confirms play / pause and shuffle', () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-01-01T00:00:00Z'));
-    const store = createStore(() => ({ engine: { volume: 1, muted: false, playing: true, loaded: true }, session: { shuffle: false, repeatMode: 'off' } })) as unknown as PlaybackStoreApi;
+  const engineOf = (over: Record<string, unknown>) => ({ volume: 1, muted: false, playing: true, loaded: true, buffering: false, ended: false, ...over });
+  const hudStore = (engine: Record<string, unknown>, session: Record<string, unknown> = { shuffle: false, repeatMode: 'off', current: 'A' }) => {
+    const store = createStore(() => ({ engine: engineOf(engine), session, volumeLimitHits: 0 })) as unknown as PlaybackStoreApi;
     render(withServices({ playback: store, prefs: createPrefsStore({ getItem: () => null, setItem: () => undefined }) }, <Hud />));
-    // the song ends and the next one loads: playing flips by itself - no HUD
-    act(() => store.setState({ engine: { volume: 1, muted: false, playing: false, loaded: true } } as never));
-    expect(screen.queryByTestId('hud-action')).toBeNull();
-    act(() => store.setState({ engine: { volume: 1, muted: false, playing: true, loaded: true } } as never));
-    expect(screen.queryByTestId('hud-action')).toBeNull();
-    // later, the listener presses pause
-    vi.setSystemTime(Date.now() + 5000);
-    act(() => store.setState({ engine: { volume: 1, muted: false, playing: false, loaded: true } } as never));
+    return store;
+  };
+  const setEngine = (store: PlaybackStoreApi, over: Record<string, unknown>) => act(() => store.setState({ engine: engineOf(over) } as never));
+
+  it('confirms play / pause and shuffle when the listener does it', () => {
+    const store = hudStore({});
+    setEngine(store, { playing: false });
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Pause');
-    act(() => store.setState({ session: { shuffle: true, repeatMode: 'off' } } as never));
+    setEngine(store, { playing: true });
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Play');
+    act(() => store.setState({ session: { shuffle: true, repeatMode: 'off', current: 'A' } } as never));
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Shuffle on');
-    act(() => store.setState({ session: { shuffle: true, repeatMode: 'one' } } as never));
+    act(() => store.setState({ session: { shuffle: true, repeatMode: 'one', current: 'A' } } as never));
     expect(screen.getByTestId('hud-action')).toHaveTextContent('Repeat this song');
-    vi.useRealTimers();
+  });
+
+  it('regression: a song playing to its end and the next one starting never shows Pause or Play (no timers involved)', () => {
+    const store = hudStore({});
+    // the browser raises `pause` while the element is already `ended`
+    setEngine(store, { playing: false, ended: true });
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+    // main moves on: the next source loads (not loaded, buffering), starts, becomes ready
+    act(() => store.setState({ session: { shuffle: false, repeatMode: 'off', current: 'B' }, engine: engineOf({ playing: false, loaded: false, buffering: true, ended: false }) } as never));
+    setEngine(store, { playing: true, loaded: false, buffering: true });
+    setEngine(store, { playing: true, loaded: true, buffering: false });
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+    // and the listener pausing the NEW song straight away is still confirmed
+    setEngine(store, { playing: false });
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Pause');
+  });
+
+  it('regression: pressing Play after the last song ended is still confirmed', () => {
+    const store = hudStore({});
+    setEngine(store, { playing: false, ended: true });
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+    setEngine(store, { playing: true, ended: false });
+    expect(screen.getByTestId('hud-action')).toHaveTextContent('Play');
+  });
+
+  it('regression: Next / Previous (a new source loads while playing) shows no Pause', () => {
+    const store = hudStore({});
+    act(() => store.setState({ session: { shuffle: false, repeatMode: 'off', current: 'B' }, engine: engineOf({ playing: false, loaded: false, buffering: true }) } as never));
+    expect(screen.queryByTestId('hud-action')).toBeNull();
+  });
+
+  it('volume: an increase shows the HUD with the new number and a fuller bar, a decrease shows it with the lower number', () => {
+    const store = hudStore({ volume: 0.5 });
+    setEngine(store, { volume: 0.55 });
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('55');
+    expect(screen.getByTestId('hud-volume')).toHaveAttribute('data-dir', 'up');
+    expect(screen.getByTestId('hud-volume').style.getPropertyValue('--v')).toBe('0.55');
+    setEngine(store, { volume: 0.5 });
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('50');
+    expect(screen.getByTestId('hud-volume')).toHaveAttribute('data-dir', 'down');
+    expect(screen.getByTestId('hud-volume').style.getPropertyValue('--v')).toBe('0.5');
+  });
+
+  it('volume: the maximum reads 100 with a completely filled bar, the minimum reads 0', () => {
+    const store = hudStore({ volume: 0.95 });
+    setEngine(store, { volume: 1 });
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('100');
+    expect(screen.getByTestId('hud-volume').style.getPropertyValue('--v')).toBe('1');
+    setEngine(store, { volume: 0.05 });
+    setEngine(store, { volume: 0 });
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('0');
+    expect(screen.getByTestId('hud-volume').style.getPropertyValue('--v')).toBe('0');
+    expect(screen.getByTestId('hud-volume').querySelectorAll('[data-on="true"]')).toHaveLength(0);
+  });
+
+  it('volume: nothing is shown when the value did not change, and a key pressed at a limit only confirms the true level', () => {
+    const store = hudStore({ volume: 1 });
+    setEngine(store, { volume: 1 }); // an event that changed nothing (a repeated volumechange)
+    act(() => store.setState({ session: { shuffle: false, repeatMode: 'off', current: 'A' } } as never));
+    expect(screen.queryByTestId('hud-volume')).toBeNull();
+    act(() => store.setState({ volumeLimitHits: 1 } as never)); // Up pressed at 100 %: the element fires nothing
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('100');
+    expect(screen.getByTestId('hud-volume')).toHaveAttribute('data-dir', 'none'); // no "went up" cue: it did not
+  });
+
+  it('volume: raising the volume while muted shows the new level, not "Muted"', () => {
+    const store = hudStore({ volume: 0.5, muted: true });
+    setEngine(store, { volume: 0.55, muted: false });
+    expect(screen.getByTestId('hud-volume')).toHaveTextContent('55');
+    expect(screen.getByTestId('hud-volume')).not.toHaveTextContent('Muted');
   });
 });

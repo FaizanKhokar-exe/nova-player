@@ -71,11 +71,20 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
   useEffect(() => {
     const element = root.current;
     if (element === null || reduceMotion || beatIntensity === 'off') return;
-    const gain = { off: 0, subtle: 0.35, normal: 0.65, strong: 1.05 }[beatIntensity];
+    const gain = { off: 0, subtle: 0.2, normal: 0.4, strong: 0.7 }[beatIntensity];
     const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover, .nx-np-pulse'));
+    // What is drawn follows the raw pulse through a soft envelope: it swells over a few frames instead of snapping on, and lets go
+    // more slowly, so quick successions of hits read as a gentle breathing rather than flashing.
+    let shown = 0;
+    let lastMs = performance.now();
     const off = visuals.subscribe((frame) => {
-      const value = Math.min(1, frame.levels.pulse * gain).toFixed(3);
-      for (const target of targets) target.style.setProperty('--beat', value);
+      const now = performance.now();
+      const dt = Math.min(64, now - lastMs);
+      lastMs = now;
+      const target = Math.min(1, frame.levels.pulse * gain);
+      shown += (target - shown) * (1 - Math.exp(-dt / (target > shown ? 55 : 170)));
+      const value = shown < 0.004 ? '0' : shown.toFixed(3);
+      for (const node of targets) node.style.setProperty('--beat', value);
     });
     return () => {
       off();

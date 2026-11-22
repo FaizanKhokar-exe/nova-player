@@ -784,3 +784,46 @@ test('settings: the Updates section shows the version; a development run reports
   await expect(auto).toHaveAttribute('aria-checked', 'false');
   await app.close();
 });
+
+test('Lyric Studio: the words of a line can be edited in place (double-click / F2), Escape cancels without closing the studio, and merge / duplicate work', async () => {
+  const { app, window } = await openApp();
+  await rowFor(window, 'Alpha').locator('.nx-row-title').click();
+  await waitPlaying(window);
+  await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
+  await window.getByTestId('create-lyrics').click({ timeout: 15_000 });
+  await window.getByTestId('studio-text').fill('hello darling\ncome to me\nhold me tight\nsay goodbye');
+  await window.getByTestId('studio-begin').click();
+  const rows = window.getByTestId('studio-row');
+  await expect(rows).toHaveCount(4, { timeout: 30_000 });
+  // double-click opens the editor with the current words; Enter saves
+  await rows.nth(1).locator('.nx-srow-text').dblclick();
+  const editor = window.getByTestId('studio-row-edit');
+  await expect(editor).toHaveValue('come to me');
+  await editor.fill('come back to me');
+  await editor.press('Enter');
+  await expect(rows.nth(1)).toContainText('come back to me');
+  // Escape throws the change away and the studio stays open
+  await rows.nth(2).click();
+  await window.keyboard.press('F2');
+  await expect(editor).toHaveValue('hold me tight');
+  await editor.fill('SHOULD NOT STAY');
+  await editor.press('Escape');
+  await expect(window.getByTestId('lyric-studio')).toBeVisible();
+  await expect(rows.nth(2)).toContainText('hold me tight');
+  await expect(rows.nth(2)).not.toContainText('SHOULD NOT STAY');
+  // duplicate, then merge the copy back into its original
+  await window.getByTestId('studio-duplicate').click();
+  await expect(rows).toHaveCount(5);
+  await expect(rows.nth(3)).toContainText('hold me tight');
+  await rows.nth(2).click();
+  await window.getByTestId('studio-merge').click();
+  await expect(rows).toHaveCount(4);
+  await expect(rows.nth(2)).toContainText('hold me tight hold me tight');
+  // undo brings the two lines back
+  await window.getByTestId('studio-undo').click();
+  await expect(rows).toHaveCount(5);
+  await window.keyboard.press('Escape');
+  await window.getByTestId('studio-discard').click();
+  await expect(window.getByTestId('lyric-studio')).toHaveCount(0);
+  await app.close();
+});

@@ -113,6 +113,43 @@ describe('Lyric Studio store', () => {
     h.store.getState().insertLine(0, '   ');
     expect(h.store.getState().lines).toHaveLength(6); // blank text adds nothing
   });
+  it('merges a line with the next, shifts from a line onward, locks all, and finds the next doubtful line', async () => {
+    const h = harness();
+    h.store.getState().openStudio();
+    h.store.getState().setText(LYRICS.join('\n'));
+    await h.store.getState().begin();
+    h.store.getState().toggleLock(2);
+    const before = [...h.store.getState().times];
+    h.store.getState().mergeWithNext(0);
+    let s = h.store.getState();
+    expect(s.lines).toHaveLength(LYRICS.length - 1);
+    expect(s.lines[0]?.text).toBe(`${LYRICS[0]} ${LYRICS[1]}`);
+    expect(s.times[0]).toBe(before[0]); // the first line's time stays
+    expect(s.times[1]).toBe(before[2]);
+    expect(s.locks.has(1)).toBe(true); // the lock on old line 2 moved up with it
+    h.store.getState().mergeWithNext(s.lines.length - 1); // nothing after the last line
+    expect(h.store.getState().lines).toHaveLength(LYRICS.length - 1);
+    h.store.getState().undo();
+    expect(h.store.getState().lines.map((l) => l.text)).toEqual(LYRICS);
+
+    const t0 = [...h.store.getState().times];
+    h.store.getState().shiftFrom(2, 400);
+    s = h.store.getState();
+    expect(s.times[1]).toBe(t0[1]); // before the chosen line: untouched
+    expect(s.times[2]).toBe((t0[2] ?? 0) + 400);
+    expect(s.times[3]).toBe((t0[3] ?? 0) + 400);
+    h.store.getState().shiftFrom(99, 400); // out of range: nothing happens
+    expect(h.store.getState().times).toEqual(s.times);
+
+    h.store.getState().lockAll(true);
+    expect(h.store.getState().locks.size).toBe(LYRICS.length);
+    expect(h.store.getState().nextToCheck()).toBe(false); // everything is locked: nothing is doubtful
+    h.store.getState().lockAll(false);
+    expect(h.store.getState().locks.size).toBe(0);
+    const doubtful = h.store.getState().confidence.map((c, i) => (c < 0.45 ? i : -1)).filter((i) => i >= 0);
+    expect(h.store.getState().nextToCheck()).toBe(doubtful.length > 0);
+    h.store.getState().undo();
+  });
   it('nudges inside its neighbours, shifts everything, and keeps times in order', async () => {
     const h = harness();
     h.store.getState().openStudio();

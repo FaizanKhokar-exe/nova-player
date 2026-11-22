@@ -1,7 +1,7 @@
 import { createStore, type StoreApi } from 'zustand/vanilla';
 import type { IpcResult, LyricsCandidateDto, LyricsSearchResultDto, NovaBridge, SaveLyricsResultDto } from '@nova/shared';
 import type { PlaybackStoreApi } from '../playback/playback-store.js';
-import { alignLinesAsync } from './align.js';
+import { alignLinesAsync, LOW_CONFIDENCE } from './align.js';
 import { calibrateTimes, snapLines } from './calibrate.js';
 import { buildLrc, splitLyricsText, type PlainLine, type TimedLine } from './lrc-format.js';
 import { overview, snapToOnset, TAP_LAG_MS } from './snap.js';
@@ -71,6 +71,14 @@ export interface StudioState {
   insertLine(afterIndex: number, text: string): void;
   removeLine(index: number): void;
   editLine(index: number, text: string): void;
+  /** Joins line `index` and the one after it into one line (the first line's time and lock stay). */
+  mergeWithNext(index: number): void;
+  /** Moves line `index` and every line after it by `deltaMs` (the ones before stay). */
+  shiftFrom(index: number, deltaMs: number): void;
+  /** Locks every line (so re-estimating changes nothing) or releases them all. */
+  lockAll(lock: boolean): void;
+  /** Selects the next line that is still doubtful (low confidence and not locked), wrapping round; false when none is left. */
+  nextToCheck(): boolean;
   /** Marks the singing as starting / ending at the playing position (`clear` removes both) and estimates again around it. */
   markSinging(which: 'start' | 'end' | 'clear'): void;
   saveLrc(): Promise<void>;
@@ -367,6 +375,50 @@ export function createStudioStore(bridge: NovaBridge, playback: PlaybackStoreApi
         const lines = s.lines.map((l, i) => (i === index ? { ...l, text } : l));
         weights = lines.map((l) => lineWeight(l.text));
         set({ lines, save: EMPTY_SAVE });
+      },
+
+      mergeWithNext(index) {
+        const s = get();
+        if (s.step !== 'timing' || index < 0 || index >= s.lines.length - 1) return;
+        const first = s.lines[index];
+        const second = s.lines[index + 1];
+        if (first === undefined || second === undefined) return;
+        const text = `${first.text} ${second.text}`.replace(/\s+/g, ' ').trim();
+        if (text.length > 400) return;
+        remember();
+        const lines = s.lines.flatMap((l, i) => (i === index ? [{ ...l, text }] : i === index + 1 ? [] : [l]));
+        const drop = <T,>(list: readonly T[]): T[] => list.filter((_, i) => i !== index + 1);
+        const locks = new Set<number>();
+        for (const i of s.locks) if (i !== index + 1) locks.add(i > index + 1 ? i - 1 : i);
+        weights = lines.map((l) => lineWeight(l.text));
+        set({ lines, times: drop(s.times), confidence: drop(s.confidence), locks, selected: index, save: EMPTY_SAVE });
+      },
+
+      shiftFrom(index, deltaMs) {
+        const s = get();
+        if (s.step !== 'timing' || index < 0 || index >= s.times.length || deltaMs === 0) return;
+        remember();
+        set({ times: monotonic(s.times.map((t, i) => (i >= index ? t + deltaMs : t)), s.durationMs), save: EMPTY_SAVE });
+      },
+
+      lockAll(lock) {
+        const s = get();
+        if (s.step !== 'timing') return;
+        remember();
+        set({ locks: lock ? new Set(s.lines.map((_, i) => i)) : new Set<number>(), save: EMPTY_SAVE });
+      },
+
+      nextToCheck() {
+        const s = get();
+        const n = s.lines.length;
+        for (let step = 1; step <= n; step += 1) {
+          const i = (s.selected + step) % n;
+          if (!s.locks.has(i) && (s.confidence[i] ?? 1) < LOW_CONFIDENCE) {
+            set({ selected: i });
+            return true;
+          }
+        }
+        return false;
       },
 
       markSinging(which) {

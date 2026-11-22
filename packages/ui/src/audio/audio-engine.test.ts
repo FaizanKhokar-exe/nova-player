@@ -16,10 +16,36 @@ describe('beat analyzer', () => {
     for (let i = 0; i < 60; i += 1) analyzer.analyze(frame(70), 43, (now += 16)); // steady bed
     const kick = analyzer.analyze(frame(220), 43, (now += 16));
     expect(kick.beat).toBe(true);
-    expect(kick.pulse).toBeCloseTo(0.85, 2);
+    expect(kick.pulse).toBeGreaterThan(0.45); // a clear hit pulses clearly...
+    expect(kick.pulse).toBeLessThanOrEqual(0.85); // ...but never beyond the cap
     const tooSoon = analyzer.analyze(frame(230), 43, now + 16);
     expect(tooSoon.beat).toBe(false); // inside the minimum gap
     expect(tooSoon.pulse).toBeLessThan(1);
+  });
+  it('a soft hit gives a softer pulse than a hard one (no identical full-size flash every time)', () => {
+    const strengthOf = (kick: number): number => {
+      const analyzer = createBeatAnalyzer();
+      let now = 0;
+      for (let i = 0; i < 60; i += 1) analyzer.analyze(frame(100), 43, (now += 16));
+      const out = analyzer.analyze(frame(kick), 43, now + 16);
+      return out.beat ? out.pulse : 0;
+    };
+    const soft = strengthOf(120);
+    const hard = strengthOf(250);
+    expect(soft).toBeGreaterThan(0);
+    expect(hard).toBeGreaterThan(soft);
+    expect(soft).toBeLessThan(0.65);
+    expect(hard).toBeLessThanOrEqual(0.85);
+  });
+  it('the pulse lets go slowly (about half a second), so hits blend instead of strobing', () => {
+    const analyzer = createBeatAnalyzer();
+    let now = 0;
+    for (let i = 0; i < 60; i += 1) analyzer.analyze(frame(70), 43, (now += 16));
+    const first = analyzer.analyze(frame(220), 43, (now += 16)).pulse;
+    let after = analyzer.analyze(frame(70), 43, (now += 16));
+    for (let i = 0; i < 12; i += 1) after = analyzer.analyze(frame(70), 43, (now += 16)); // ~200 ms later
+    expect(first - after.pulse).toBeLessThan(0.45); // it fades at about 1 / 480 ms, not instantly
+    expect(after.pulse).toBeLessThan(first);
   });
   it('never fires on silence or a constant tone', () => {
     const analyzer = createBeatAnalyzer();

@@ -51,6 +51,8 @@ export interface AudioLike extends EventTarget {
   currentTime: number;
   readonly duration: number;
   readonly paused: boolean;
+  /** The source played to its end (true already when `pause` is raised just before `ended`). */
+  readonly ended: boolean;
   volume: number;
   muted: boolean;
   readonly error: { readonly code: number } | null;
@@ -76,6 +78,13 @@ export interface EngineState {
   readonly playing: boolean;
   /** Waiting for data: loading a source, or stalled mid-play. */
   readonly buffering: boolean;
+  /**
+   * The source played to its end (the element's own `ended` flag). The browser fires `pause` just before `ended`, so without this a
+   * song finishing is indistinguishable from the listener pressing pause. While it is set, `playing` keeps its value until main has
+   * decided what follows (next song, repeat-one restart or stop), so a restart never shows a stop. Cleared when a source loads or
+   * playback starts again.
+   */
+  readonly ended: boolean;
   readonly durationMs: number | undefined;
   readonly volume: number;
   readonly muted: boolean;
@@ -107,6 +116,11 @@ export interface PlaybackState {
   /** A mirror of the main process's playback state: current track, modes, queue size. */
   readonly session: PlaybackStateDto | undefined;
   readonly engine: EngineState;
+  /**
+   * Counts volume requests that changed nothing because the volume was already at 0 or 100 %. The element fires no event for them,
+   * so this is how the on-screen display can still confirm the key press (it shows the true level; it never claims a change).
+   */
+  readonly volumeLimitHits: number;
   readonly error: PlaybackUiError | undefined;
   /** A non-error remark (e.g. the playing track left the library). */
   readonly notice: string | undefined;
@@ -301,7 +315,7 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       pendingSeekMs = startAtMs > 0 ? startAtMs : undefined;
       lastSavedAt = Number.NEGATIVE_INFINITY;
       set({ error: undefined });
-      setEngine({ loaded: false, playing: false, buffering: true, durationMs: durationMsFor(current.track.durationSeconds) });
+      setEngine({ loaded: false, playing: false, buffering: true, ended: false, durationMs: durationMsFor(current.track.durationSeconds) });
       setPosition(startAtMs);
       audio.src = current.mediaUrl;
       if (autoplay) startPlaying();
@@ -313,7 +327,7 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       audio.pause();
       audio.removeAttribute('src');
       audio.load();
-      setEngine({ loaded: false, playing: false, buffering: false, durationMs: undefined });
+      setEngine({ loaded: false, playing: false, buffering: false, ended: false, durationMs: undefined });
       setPosition(0);
     }
 
@@ -415,15 +429,22 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
         return;
       }
       savePositionAtEnd();
-      setEngine({ playing: false, buffering: false });
+      setEngine({ buffering: false, ended: true }); // `playing` stays until main answers (see the `pause` listener)
       const sequence = ++commandSequence;
       const result = await call('playback:trackFinished', { trackId: endedId });
-      if (sequence !== commandSequence) return; // the user took over while main decided
+      if (sequence !== commandSequence) { // the user took over while main decided: believe the element
+        setEngine({ playing: !audio.paused });
+        return;
+      }
       if (!result.ok) {
+        setEngine({ playing: false });
         set({ error: { message: result.error.message, trackId: endedId, retryable: false } });
         return;
       }
-      applySession(result.value.state, result.value.outcome);
+      // Next / restart / start-again keep the player "playing" without a gap; anything else means it really stopped.
+      const outcome = result.value.outcome;
+      if (outcome !== 'restart' && outcome !== 'started') setEngine({ playing: false });
+      applySession(result.value.state, outcome);
     }
 
     function savePositionAtEnd(): void {
@@ -449,12 +470,16 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
       });
       on('durationchange', () => setEngine({ durationMs: durationMsFor(get().session?.current?.track.durationSeconds) }));
       on('canplay', () => setEngine({ buffering: false }));
-      on('play', () => setEngine({ playing: true }));
-      on('playing', () => setEngine({ playing: true, buffering: false }));
+      on('play', () => setEngine({ playing: true, ended: false }));
+      on('playing', () => setEngine({ playing: true, buffering: false, ended: false }));
       on('waiting', () => setEngine({ buffering: true }));
       on('pause', () => {
-        // Also fires just before `ended`; trackEnded() handles that case itself.
-        setEngine({ playing: false, buffering: false });
+        // Also fires just before `ended` (the element is already `ended` then); trackEnded() handles that case itself.
+        // Repeat-one restarts the same song at once, so the element never really stopped: leave `playing` alone.
+        if (audio.ended && holdTrack) return;
+        // At the end of a song `playing` is left as it was until main has decided what comes next (next song, repeat-one restart or
+        // stop): announcing "stopped" for those few milliseconds would be wrong when the very next thing is the song starting again.
+        setEngine(audio.ended ? { buffering: false, ended: true } : { playing: false, buffering: false, ended: false });
         savePosition(true);
       });
       on('timeupdate', () => {
@@ -557,7 +582,8 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
     return {
       connection: 'disconnected',
       session: undefined,
-      engine: { loaded: false, playing: false, buffering: false, durationMs: undefined, volume: clamp01(audio.volume), muted: audio.muted },
+      engine: { loaded: false, playing: false, buffering: false, ended: false, durationMs: undefined, volume: clamp01(audio.volume), muted: audio.muted },
+      volumeLimitHits: 0,
       error: undefined,
       notice: undefined,
       positionStore,
@@ -663,6 +689,8 @@ export function createPlaybackStore(bridge: NovaBridge, audio: AudioLike, option
 
       setVolume(volume) {
         const value = clamp01(volume);
+        // Already there (a key pressed at 0 % or 100 %): no `volumechange` will follow, so say so for the on-screen display.
+        if ((value === 0 || value === 1) && audio.volume === value && !(value > 0 && audio.muted)) set((s) => ({ volumeLimitHits: s.volumeLimitHits + 1 }));
         audio.volume = value;
         if (value > 0 && audio.muted) audio.muted = false;
       },

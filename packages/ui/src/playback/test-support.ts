@@ -19,6 +19,8 @@ export class FakeAudio extends EventTarget implements AudioLike {
   private time = 0;
   duration = Number.NaN;
   paused = true;
+  /** Like the browser: true once playback reached the end, false again after a new source or a restart. */
+  ended = false;
   volume = 1;
   muted = false;
   error: { code: number } | null = null;
@@ -51,6 +53,7 @@ export class FakeAudio extends EventTarget implements AudioLike {
     this.time = 0;
     this.duration = Number.NaN;
     this.paused = true; // the load algorithm pauses (it raises no `pause` event)
+    this.ended = false;
     this.error = null;
   }
 
@@ -76,6 +79,10 @@ export class FakeAudio extends EventTarget implements AudioLike {
       const name = this.rejectNextPlayWith;
       this.rejectNextPlayWith = undefined;
       return Promise.reject(Object.assign(new Error(name), { name }));
+    }
+    if (this.ended) {
+      this.ended = false;
+      this.time = 0; // play() after the end restarts from the beginning
     }
     if (this.paused) {
       this.paused = false;
@@ -126,7 +133,8 @@ export class FakeAudio extends EventTarget implements AudioLike {
     this.dispatch('waiting');
   }
   simEnded(): void {
-    this.pause(); // browsers raise `pause` just before `ended`
+    this.ended = true; // already true when the browser raises `pause`, which comes just before `ended`
+    this.pause();
     this.dispatch('ended');
   }
   simFail(code: number): void {
