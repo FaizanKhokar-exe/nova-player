@@ -1,88 +1,83 @@
 import { describe, expect, it } from 'vitest';
-import { createParticles, stepParticles } from './particles.js';
+import { aliveCount, BURST_MAX, BURST_MIN, createParticles, MAX_PARTICLE_SPEED, particleAlpha, stepParticles } from './particles.js';
 
 const seeded = () => {
   let s = 1;
   return () => ((s = (s * 16807) % 2147483647) - 1) / 2147483646;
 };
-const input = { dt: 0.016, level: 0.3, pulse: 0, beat: false, width: 800, height: 600 };
+const quiet = { dt: 1 / 60, beat: false, strength: 0, width: 800, height: 600 };
+const hit = (strength: number) => ({ ...quiet, beat: true, strength });
 
-describe('particles', () => {
-  it('creates the requested number inside the box', () => {
-    const p = createParticles(100, 800, 600, seeded());
-    expect(p.count).toBe(100);
-    expect([...p.x].every((v) => v >= 0 && v <= 800)).toBe(true);
-    expect([...p.y].every((v) => v >= 0 && v <= 600)).toBe(true);
+describe('beat-born particles', () => {
+  it('start empty and stay empty without a beat, however long it runs (no idle drifting)', () => {
+    const p = createParticles(120);
+    expect(aliveCount(p)).toBe(0);
+    for (let i = 0; i < 600; i += 1) stepParticles(p, quiet, seeded());
+    expect(aliveCount(p)).toBe(0);
+    expect([...p.x].every((v) => v === 0)).toBe(true);
   });
-  it('drifts upward and respawns below when leaving the top', () => {
-    const random = seeded();
-    const p = createParticles(20, 800, 600, random);
-    const before = Float32Array.from(p.y);
-    stepParticles(p, input, random);
-    expect([...p.y].filter((v, i) => v < (before[i] as number)).length).toBeGreaterThan(15);
-    for (let i = 0; i < 4000; i += 1) stepParticles(p, input, random);
-    expect([...p.y].every((v) => v > -60 && v < 600 + 180)).toBe(true); // never lost
-  });
-  it('a beat lights every particle and kicks it away from the centre', () => {
-    const random = seeded();
-    const p = createParticles(30, 800, 600, random);
-    p.x.fill(700);
-    p.y.fill(300);
-    p.vx.fill(0);
-    stepParticles(p, { ...input, beat: true }, random);
-    expect([...p.glow].every((g) => g > 0.9)).toBe(true);
-    expect([...p.vx].every((v) => v > 0)).toBe(true); // pushed right, away from the centre
-  });
-  it('glow decays and louder music moves particles faster', () => {
-    const random = seeded();
-    const quiet = createParticles(10, 800, 600, seeded());
-    const loud = createParticles(10, 800, 600, seeded());
-    stepParticles(quiet, { ...input, beat: true }, random);
-    for (let i = 0; i < 60; i += 1) stepParticles(quiet, input, random);
-    expect([...quiet.glow].every((g) => g === 0)).toBe(true);
-    const y0 = loud.y[0] as number;
-    const y1 = quiet.y[0] as number;
-    void y1;
-    stepParticles(loud, { ...input, level: 1 }, seeded());
-    const slow = createParticles(10, 800, 600, seeded());
-    stepParticles(slow, { ...input, level: 0 }, seeded());
-    expect(y0 - (loud.y[0] as number)).toBeGreaterThan(y0 - (slow.y[0] as number));
-  });
-  it('is safe with a huge or negative dt', () => {
-    const p = createParticles(5, 100, 100, seeded());
-    expect(() => stepParticles(p, { ...input, dt: 99 })).not.toThrow();
-    expect(() => stepParticles(p, { ...input, dt: -1 })).not.toThrow();
-    expect([...p.x].every(Number.isFinite)).toBe(true);
-  });
-});
 
-describe('v0.11.3: frequent beats keep the particles on screen', () => {
-  it('after hundreds of beats nothing is outside the width, and nothing exceeds the speed cap', async () => {
-    const { createParticles, stepParticles, MAX_PARTICLE_SPEED } = await import('./particles.js');
-    const system = createParticles(180, 800, 500);
-    for (let frame = 0; frame < 900; frame += 1) {
-      stepParticles(system, { dt: 1 / 60, level: 0.9, pulse: 1, beat: frame % 8 === 0, width: 800, height: 500 });
-      for (let i = 0; i < system.count; i += 1) {
-        expect(system.x[i]).toBeGreaterThanOrEqual(-14);
-        expect(system.x[i]).toBeLessThanOrEqual(814);
-        expect(Math.hypot(system.vx[i] as number, system.vy[i] as number)).toBeLessThanOrEqual(MAX_PARTICLE_SPEED + 1e-3);
+  it('a beat releases a burst, bigger for a harder hit', () => {
+    const soft = createParticles(120);
+    const hard = createParticles(120);
+    stepParticles(soft, hit(0), seeded());
+    stepParticles(hard, hit(1), seeded());
+    expect(aliveCount(soft)).toBe(BURST_MIN);
+    expect(aliveCount(hard)).toBe(BURST_MAX);
+  });
+
+  it('the performance budget scales the burst down', () => {
+    const p = createParticles(120);
+    stepParticles(p, { ...hit(1), detail: 0.5 }, seeded());
+    expect(aliveCount(p)).toBe(Math.round(BURST_MAX * 0.5));
+  });
+
+  it('released particles fly outward from the middle and are inside the box when born', () => {
+    const p = createParticles(60);
+    stepParticles(p, { ...hit(1), dt: 0 }, seeded());
+    for (let i = 0; i < p.count; i += 1) {
+      if ((p.life[i] as number) <= 0) continue;
+      expect(p.x[i]).toBeGreaterThanOrEqual(0);
+      expect(p.x[i]).toBeLessThanOrEqual(800);
+      const outward = ((p.x[i] as number) - 400) * (p.vx[i] as number) + ((p.y[i] as number) - 300) * ((p.vy[i] as number) + 14);
+      expect(outward).toBeGreaterThan(-1); // away from the centre (the small lift aside)
+    }
+  });
+
+  it('every particle fades out by itself, and the field is empty again about two seconds after the last beat', () => {
+    const p = createParticles(80);
+    const random = seeded();
+    stepParticles(p, hit(1), random);
+    expect(aliveCount(p)).toBeGreaterThan(0);
+    for (let i = 0; i < 130; i += 1) stepParticles(p, quiet, random); // ~2.2 s
+    expect(aliveCount(p)).toBe(0);
+  });
+
+  it('frequent beats reuse the pool: never more alive than slots, never faster than the cap, always finite', () => {
+    const p = createParticles(60);
+    const random = seeded();
+    for (let frame = 0; frame < 1200; frame += 1) {
+      stepParticles(p, frame % 7 === 0 ? hit(1) : quiet, random);
+      expect(aliveCount(p)).toBeLessThanOrEqual(60);
+      for (let i = 0; i < p.count; i += 1) {
+        expect(Number.isFinite(p.x[i])).toBe(true);
+        expect(Math.hypot(p.vx[i] as number, p.vy[i] as number)).toBeLessThanOrEqual(MAX_PARTICLE_SPEED + 1e-3);
       }
     }
   });
-});
 
-describe('v0.13.1: the particles fill the whole width, including both outer edges', () => {
-  it('after many beats there are particles in the outer 10% on the left AND the right', async () => {
-    const { createParticles, stepParticles } = await import('./particles.js');
-    const system = createParticles(150, 1000, 600);
-    for (let frame = 0; frame < 1500; frame += 1) stepParticles(system, { dt: 1 / 60, level: 0.8, pulse: 1, beat: frame % 10 === 0, width: 1000, height: 600 });
-    let left = 0;
-    let right = 0;
-    for (let i = 0; i < system.count; i += 1) {
-      if ((system.x[i] as number) < 100) left += 1;
-      if ((system.x[i] as number) > 900) right += 1;
-    }
-    expect(left).toBeGreaterThanOrEqual(8);
-    expect(right).toBeGreaterThanOrEqual(8);
+  it('is safe with a huge or negative dt, an empty pool and an out-of-range strength', () => {
+    const p = createParticles(5);
+    expect(() => stepParticles(p, { ...hit(5), dt: 99 })).not.toThrow();
+    expect(() => stepParticles(p, { ...hit(-3), dt: -1 })).not.toThrow();
+    expect(() => stepParticles(createParticles(0), hit(1))).not.toThrow();
+  });
+
+  it('opacity swells in quickly, peaks, and eases to zero at the end of life', () => {
+    expect(particleAlpha(1)).toBe(0);
+    expect(particleAlpha(0)).toBe(0);
+    expect(particleAlpha(0.9)).toBeGreaterThan(0.6);
+    expect(particleAlpha(0.5)).toBeLessThan(particleAlpha(0.9));
+    expect(particleAlpha(0.1)).toBeLessThan(particleAlpha(0.5));
   });
 });

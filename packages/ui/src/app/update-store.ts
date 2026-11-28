@@ -34,7 +34,18 @@ export function createUpdateStore(bridge: NovaBridge): UpdateStoreApi {
       refresh: () => call('update:getStatus'),
       check: () => call('update:check'),
       download: () => call('update:download'),
-      install: () => call('update:install'),
+      install: async () => {
+        // Show "Restarting…" at once; main confirms with the same state and then closes the app.
+        const before = get().status;
+        if (before.state !== 'ready') return;
+        set({ status: { ...before, state: 'installing' } });
+        try {
+          const result = (await bridge.invoke('update:install', undefined)) as IpcResult<UpdateStatusDto>;
+          set({ status: result.ok ? result.value : before });
+        } catch {
+          set({ status: before }); // never leave "Restarting…" on screen if the app could not start the install
+        }
+      },
       checkQuietly: async () => {
         await call('update:check');
         const s = get().status;

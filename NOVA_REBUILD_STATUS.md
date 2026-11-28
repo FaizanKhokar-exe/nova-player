@@ -1093,3 +1093,15 @@ Entry points: the sparkle button in the player bar (only when the playing song h
 - **Beat:** pulse strength follows how hard the hit is, release /480 ms, min gap 230 ms, renderer envelope (55 ms attack / 170 ms release), gains 0.2 / 0.4 / 0.7, cover scale 1.2 %.
 - **Lyric Studio:** edit words in place (double-click, F2, Enter saves, Esc cancels), Duplicate, Merge with next, shift from here +-0.5 s, Lock/Unlock all, Next to check, 0.75x speed; current-line lookup is a binary search and pauses when the window is hidden.
 - Verified: automated only (Linux, real Electron under a virtual display, synthetic audio). Real Windows + real speakers: not verified.
+
+## Phase 21 - v0.17.0 (smoother, responsive, redesigned Settings, update size)
+
+- **Motion:** sidebar accent bar glides between pages (one element, transform only), staggered sidebar entrance, press states on nav/tabs, Settings pane fade-in, restart overlay; all CSS-only, honour `data-reduce-motion` / `data-perf`.
+- **Lyrics:** own glide scroll (`scrollTop += diff * (1 - exp(-dt/150))`, cancelled by wheel/touch/keys); *Jump to now* always mounted, shown only after the user scrolls away (`data-show`), steady click target; line transitions 560-620 ms.
+- **Beat particles:** fixed pool, born only on beats (burst by strength, life 1.1-1.9 s, outward drag), empty with no beat. **Aurora backdrop removed** (`LyricsBackdrop = 'particles' | 'plain'`; a saved `aurora` becomes `particles`).
+- **Sidebar:** duplicate playlist list and Add folder / Scan removed (Songs header + Settings -> Library), update dot on Settings.
+- **Songs page:** header with count + total time, Play, Shuffle, Add folder, Scan (`songs-*` test ids).
+- **Settings:** two panes; sections Appearance, Playback, Lyrics, Performance, Library, Shortcuts, Updates; tabs below 900 px; narrow rules at 760/680 px (window min width stays 560).
+- **Updates:** `UpdateStatusDto` + `totalBytes`, `sizeKind` (`full` = installer upper bound before download, `update` = real delta once it runs), `downloadedBytes`, `bytesPerSecond`, state `installing`; 45 s check timeout; one-click retry of a failed download; install shows `installing` (store is optimistic and reverts on failure), overlay, then quits after 350 ms paint time.
+- **Tidy up:** token-based bracket clutter (combined groups, full-width brackets, 2009 Remaster, kbps/khz), trailing "- Official Video", `.mp3`, VEVO, `[05]` numbers, idempotent; preview line in the edit dialog.
+- Verified: automated only (Linux; real Electron under a virtual display; synthetic audio). Real Windows, real speakers and a real published update: not verified.

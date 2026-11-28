@@ -23,4 +23,29 @@ describe('suggestNames', () => {
   it('works for Urdu and other scripts', () => {
     expect(suggestNames('03 - دل دل پاکستان (HD)', 'جنید جمشید').title).toBe('دل دل پاکستان');
   });
+  it('removes combined and unusual clutter groups', () => {
+    expect(suggestNames('Kesariya (Official Music Video HD)', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya [Lyrics + Download]', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya (Official Video) [HD] (320kbps)', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya 【Official Video】', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Yesterday (2009 Remaster)', 'The Beatles').title).toBe('Yesterday');
+  });
+  it('removes clutter after a dash or bar, file extensions, VEVO and bracketed track numbers', () => {
+    expect(suggestNames('Kesariya - Official Video', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya | Lyrics', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya.mp3', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('[05] Kesariya', 'Pritam').title).toBe('Kesariya');
+    expect(suggestNames('Kesariya', 'PritamVEVO').artist).toBe('Pritam');
+  });
+  it('keeps parts of a real name that merely look like clutter', () => {
+    expect(suggestNames('Hotel California (1976)', 'Eagles').title).toBe('Hotel California (1976)');
+    expect(suggestNames('Live and Let Die (Live)', 'Wings').title).toBe('Live and Let Die (Live)');
+    expect(suggestNames('Clean Bandit - Rather Be', 'Clean Bandit').title).toBe('Rather Be');
+    expect(suggestNames('New York (Acoustic)', 'Someone').title).toBe('New York (Acoustic)');
+    expect(suggestNames('Audio Bullys', 'Someone').title).toBe('Audio Bullys');
+  });
+  it('is idempotent: tidying a tidied name changes nothing', () => {
+    const once = suggestNames('01 - Atif Aslam - Tera Hone Laga Hoon (Official Video) [320kbps] www.songspk.com', 'Unknown Artist');
+    expect(suggestNames(once.title, once.artist).changed).toBe(false);
+  });
 });

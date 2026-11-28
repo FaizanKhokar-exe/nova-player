@@ -32,6 +32,7 @@ test.describe('launch policy', () => {
     await expect(window.getByTestId('empty-state')).toContainText('Choose the folder where your music lives');
     expect(await scanState(window)).toMatchObject({ active: false, last: undefined });
     await nav(window, 'settings').click();
+    await window.getByTestId('settings-tab-library').click();
     await expect(window.getByTestId('library-settings')).toContainText('No music folders yet');
     await expect(window.getByRole('switch', { name: 'Watch folders for changes' })).toHaveAttribute('aria-checked', 'false');
     await nav(window, 'albums').click();
@@ -63,6 +64,7 @@ test.describe('launch policy', () => {
     await expect(count(window, 'tracks')).toHaveText('7', { timeout: 30_000 }); // 6 - Foxtrot + Hotel + India
     await expect.poll(() => scanState(window), { timeout: 30_000 }).toMatchObject({ active: false, last: 'completed', rootStatuses: ['completed'] });
     await nav(window, 'settings').click();
+    await window.getByTestId('settings-tab-library').click();
     await expect(window.getByRole('switch', { name: 'Watch folders for changes' })).toHaveAttribute('aria-checked', 'true');
     await nav(window, 'tracks').click();
     await expect.poll(() => trackTitles(window)).toEqual(['Alpha', 'Bravo', 'Charlie', 'Delta', 'Echo', 'Hotel', 'India']);
@@ -98,6 +100,7 @@ test.describe('launch policy', () => {
     await nav(window, 'tracks').click();
     await expect.poll(() => trackTitles(window)).toEqual(ALL);
     await nav(window, 'settings').click();
+    await window.getByTestId('settings-tab-library').click();
     await expect(window.getByTestId('root-row')).toContainText('folder not available');
     // No scan was started, so there is no failed result to show.
     expect(await scanState(window)).toMatchObject({ active: false, last: undefined });
@@ -107,6 +110,7 @@ test.describe('launch policy', () => {
     // Plugging it back in: a scan sees it again and nothing was lost.
     fs.renameSync(away, box.music);
     await nav(window, 'settings').click();
+    await window.getByTestId('settings-tab-library').click();
     await window.getByRole('button', { name: 'Scan all' }).click();
     await expect.poll(() => scanState(window), { timeout: 30_000 }).toMatchObject({ active: false, last: 'completed' });
     await expect(window.getByTestId('root-row')).not.toContainText('folder not available');

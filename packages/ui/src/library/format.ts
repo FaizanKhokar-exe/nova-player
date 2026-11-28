@@ -31,3 +31,21 @@ export function formatClock(milliseconds: number): string {
   const two = (n: number): string => String(n).padStart(2, '0');
   return hours > 0 ? `${hours}:${two(minutes)}:${two(secs)}` : `${minutes}:${two(secs)}`;
 }
+
+/** A long total, for a library: "42 min", "3 h 05 min", "126 h". Absent or invalid shows nothing. */
+export function formatTotal(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 60) return '';
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return hours >= 100 || rest === 0 ? `${hours} h` : `${hours} h ${String(rest).padStart(2, '0')} min`;
+}
+
+/** A download size for people: "850 KB", "6.2 MB", "118 MB". */
+export function formatBytes(bytes: number | undefined): string {
+  if (bytes === undefined || !Number.isFinite(bytes) || bytes <= 0) return '';
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  const mb = bytes / (1024 * 1024);
+  return mb < 10 ? `${mb.toFixed(1)} MB` : `${Math.round(mb)} MB`;
+}

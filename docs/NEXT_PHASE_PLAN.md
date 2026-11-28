@@ -1,6 +1,8 @@
-# Next phase plan (proposal, nothing here is built yet)
+# Next phase plan (proposal; section 1 is built, the rest is not)
 
-## 1. Online updates (free) — BUILT in 0.16.0 (needs a real release to verify)
+> Updated for v0.17.0: online updates now show the update size, retry a failed download and restart with an on-screen overlay. Still unverified against a real published release.
+
+## 1. Online updates (free) — BUILT in 0.16.0, improved in 0.17.0 (needs a real release to verify)
 - `electron-updater` + GitHub Releases. The Windows workflow publishes `Nova Player Setup x.y.z.exe`, its `.blockmap` and `latest.yml` to a Release (tag `vX.Y.Z`); installed apps check `latest.yml`, download in the background, and install on quit.
 - Needs: a public repo (or a read-only token inside the app, which is not safe), `publish: github` in `electron-builder.yml`, `GH_TOKEN` in the workflow (already provided as `secrets.GITHUB_TOKEN`).
 - Privacy: this is a second network access (github.com). It must be disclosed (FAQ, Settings) and switchable ("Check for updates automatically"), default ON with a one-time notice.

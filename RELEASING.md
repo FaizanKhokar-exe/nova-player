@@ -104,10 +104,10 @@ it on Windows.
 
 ## Publishing an update (free, GitHub Releases)
 
-1. Bump `version` in `apps/desktop/package.json` (e.g. 0.16.1) and push.
-2. Tag it: `git tag v0.16.1 && git push origin v0.16.1`.
-3. The *Windows installer* workflow builds and attaches `Nova-Player-Setup-0.16.1.exe`, its `.blockmap` and `latest.yml` to the Release.
-4. Installed apps (Settings -> Updates, or the automatic check ~8 s after launch) see the new `latest.yml`, show a notice, download on click and install on "Restart & update".
+1. Bump `version` in `apps/desktop/package.json` (e.g. 0.17.0) and push.
+2. Tag it: `git tag v0.17.0 && git push origin v0.17.0`.
+3. The *Windows installer* workflow builds and attaches `Nova-Player-Setup-0.17.0.exe`, its `.blockmap` and `latest.yml` to the Release.
+4. Installed apps (Settings -> Updates, or the automatic check ~8 s after launch) see the new `latest.yml`, show a notice and the size (installer size as an upper bound; the real, usually much smaller, update size once the download starts), download on click and install on "Restart & update" (an on-screen *Updating…* overlay appears, then the app closes and reopens by itself).
 
 Requirements: the repository must be **public** (no token inside the app); the first install is always manual; the tag version must match `package.json`; unsigned builds still update but SmartScreen warns on a fresh download. Untested on real Windows/GitHub until the first real release.
 
@@ -153,6 +153,9 @@ On a clean Windows 10/11 x64 machine or VM:
 - [ ] Media keys and tray menu control playback; a toast appears for a new track when unfocused.
 - [ ] A `.lrc` file beside a track shows synced lyrics; an embedded cover shows.
 - [ ] Settings: Light/Dark switch, the accent follows the cover of the playing track, fixed swatches work, choices survive a relaunch.
+- [ ] v0.17.0: Settings shows a section list on the left (tabs when the window is narrow); the window can be made as narrow as ~560 px without sideways scrolling; sidebar has no playlist list/Add/Scan, the accent bar glides between pages; Songs header has Play, Shuffle, Add folder, Scan.
+- [ ] v0.17.0: Lyrics Mode particles appear only on beats (none in silence); *Jump to now* appears after scrolling away and returns smoothly.
+- [ ] v0.17.0 update (needs a real newer release): size shown before download, progress with real size, *Restart & update* shows the overlay and the app reopens as the new version.
 - [ ] Lyrics page: current line glows, scrolling by hand shows *Jump to now*; *Attach a .lrc file...* opens the Windows file dialog and the chosen lyrics show; *Remove attached lyrics* undoes it.
 - [ ] The Inter / Sora fonts render (not a fallback), and the window looks right at 125% and 150% display scaling.
 - [ ] Close and relaunch: queue and position restored (paused); a second launch focuses the first.

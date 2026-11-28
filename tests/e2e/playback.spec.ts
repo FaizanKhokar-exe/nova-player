@@ -394,6 +394,7 @@ test.describe('the library stays usable while playing', () => {
     const alphaUrl = (await audioOf(window)).src;
 
     await window.getByTestId('nav-settings').click();
+    await window.getByTestId('settings-tab-library').click();
     await window.getByTestId('root-row').getByRole('button', { name: /Remove/ }).click();
     await window.getByTestId('dialog').getByRole('button', { name: 'Remove' }).click();
     await window.getByTestId('nav-songs').click();

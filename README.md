@@ -7,7 +7,7 @@ left off).
 
 Everything stays on your machine. See [Privacy and data](#privacy-and-data).
 
-> **Release status (read this first).** Version 0.16.1 (the "Nova Player 2" redesign) is a **release candidate**. It has been
+> **Release status (read this first).** Version 0.17.0 (the "Nova Player 2" redesign) is a **release candidate**. It has been
 > built into a Windows installer and exercised in a Linux test environment (see
 > [Release status in detail](#release-status-in-detail)), but it has **not yet been installed and run
 > on a real Windows machine**, and the installer is **unsigned**. Expect a Windows security warning
@@ -31,7 +31,7 @@ Everything stays on your machine. See [Privacy and data](#privacy-and-data).
 - **Queue drawer** - what played, what plays now, what is next; drag or use the arrows to reorder, remove, clear.
 - **Lyrics** - time-synced lyrics from a `.lrc` next to the song (same name) or one you attach. In **Now Playing**
   they sit beside the cover: the line being sung fills left to right, lines further away fade and blur. **Lyrics
-  Mode** is a separate full-screen layout where particles (or an aurora glow) move **with the beat** behind big lyrics.
+  Mode** is a separate full-screen layout where particles are **born on the beat** (none when there is no beat) behind big lyrics. The lyric list glides smoothly, and **Jump to now** brings you back to the current line after you scroll away.
   Click a line to jump there.
 - **Real audio spectrum** - bars / wave / ring in the player bar and Now Playing, and a **Visualizer** layout, all
   drawn from the live audio (not fake animation). A single shared animation loop keeps it light; **Performance**
@@ -55,7 +55,7 @@ Supported audio files: `.mp3`, `.flac`, `.ogg`, `.oga`, `.opus`, `.m4a`, `.aac`,
 | Windows on ARM, 32-bit Windows | Not built, not supported. |
 | macOS, Linux | Not supported. (The test suite runs on Linux; that is a test environment, not a supported product.) |
 
-There is **no auto-update**: to upgrade, install the newer installer over the old one.
+**Updates are online** (free, via GitHub Releases): Settings -> Updates checks, shows the size, downloads only on your click (only the changed parts when possible) and then restarts into the new version. The very first install is always manual.
 
 ## Installing (Windows)
 
@@ -81,7 +81,7 @@ database; your files are untouched.
 
 ## Known limitations
 
-- **Not verified on real Windows**, and **unsigned** (SmartScreen warning). No auto-update.
+- **Not verified on real Windows**, and **unsigned** (SmartScreen warning). Online update is built but not yet verified against a real published release.
 - **Audible output has never been verified by a person**: automated tests confirm that audio is
   decoded and the playback clock advances, not that sound comes out of speakers.
 - Lyrics come only from `.lrc` files - beside the track or attached by you (no lyrics embedded in tags,
@@ -140,8 +140,7 @@ What the code does, checked against the source:
   `library\nova.db` (a SQLite database: your registered folders, one row of tag data per track, your saved queue/position,
   and the text of any `.lrc` you attached) and `shell-state.json` (window position and size), plus Chromium's own
   profile data for the app window.
-- **No network use by the app's own code.** There is no telemetry, analytics, crash upload, update
-  check or online lookup: the page's Content-Security-Policy only allows its own files, `data:` images
+- **Network use is limited and switchable.** There is no telemetry, analytics or crash upload. The only requests are the optional update check (GitHub Releases, can be switched off) and the lyrics/name lookup (only after you consent). The older statement that follows describes the page itself: the page's Content-Security-Policy only allows its own files, `data:` images
   and the local `nova-media:` audio address, and the main process contains no network calls.
   (Links, if any ever opened, would be handed to your default browser; the window itself never
   navigates away from the app.)
@@ -157,6 +156,6 @@ What the code does, checked against the source:
 | Windows NSIS installer **built** (cross-built on Linux with Wine) | Yes - unsigned |
 | Installer **installed and run on real Windows** | **No** |
 | Code signing | **Not configured** |
-| Auto-update | **Not implemented** |
+| Online update (GitHub Releases) | **Built in 0.16.0, improved in 0.17.0; not yet verified with a real release** |
 
 For development, build and release instructions see [RELEASING.md](RELEASING.md).

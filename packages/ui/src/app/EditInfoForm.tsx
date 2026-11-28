@@ -79,6 +79,11 @@ export function EditInfoForm({ track, onClose }: { track: TrackDto; onClose: () 
         <button type="button" className="nx-btn" disabled={!tidy.changed} data-testid="edit-tidy" data-tip="Removes track numbers, site names, quality tags and “Official Video”" onClick={() => { setTitle(tidy.title); setArtist(tidy.artist); }}><Icon name="sparkles" size={14} /> Tidy up</button>
         <button type="button" className="nx-btn" disabled={lookup.status === 'searching' || title.trim() === ''} data-testid="edit-find" onClick={() => void search()}><Icon name="search" size={14} /> {lookup.status === 'searching' ? 'Looking…' : 'Find the right name'}</button>
       </div>
+      {tidy.changed && (
+        <p className="nx-faint" style={{ margin: 0, fontSize: 12.5 }} data-testid="edit-tidy-preview">
+          Tidy up will make it: <strong>{tidy.title}</strong>{tidy.artist === '' ? '' : ` — ${tidy.artist}`}
+        </p>
+      )}
       {!consent && lookup.status === 'idle' && <p className="nx-faint" style={{ margin: 0, fontSize: 12.5 }}>“Find the right name” sends only this title and artist to lrclib.net (a free lyrics database). Nothing else leaves your computer.</p>}
       {lookup.status === 'offline' && <p className="nx-studio-warn" role="status">Couldn’t reach the lookup service. Check your internet connection.</p>}
       {lookup.status === 'error' && <p className="nx-studio-warn" role="status">The lookup failed. Try again in a moment.</p>}

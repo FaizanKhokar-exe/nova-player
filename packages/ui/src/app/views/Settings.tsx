@@ -3,10 +3,10 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useStore } from 'zustand';
 import { EqualizerPanel } from '../EqualizerPanel.js';
-import { baseName, plural } from '../../library/format.js';
+import { baseName, formatBytes, plural } from '../../library/format.js';
 import { useLibraryStore } from '../../library/LibraryStoreProvider.js';
 import { SPEEDS, WALLPAPER_BLUR_RANGE, WALLPAPER_DIM_RANGE, type PerformanceMode, type VisualizerStyle, type LyricsBackdrop, type LyricsAnimation, type SungLines, type LyricsAlign, type LyricsCase, type LyricsFont, type BeatIntensity } from '../../prefs/prefs-store.js';
-import { Icon } from '../../theme/Icon.js';
+import { Icon, type IconName } from '../../theme/Icon.js';
 import { LYRICS_SIZE_RANGE, SWATCHES } from '../../theme/theme-store.js';
 import type { MoodMode } from '../../theme/mood.js';
 import { useCollections } from '../../collections/CollectionsStoreProvider.js';
@@ -36,31 +36,39 @@ function UpdatesSection() {
     const timer = setInterval(() => { void updates.getState().refresh(); }, 700);
     return () => clearInterval(timer);
   }, [status.state, updates]);
-  const busy = status.state === 'checking' || status.state === 'downloading';
+  const busy = status.state === 'checking' || status.state === 'downloading' || status.state === 'installing';
+  const size = formatBytes(status.totalBytes);
+  const speed = formatBytes(status.bytesPerSecond);
   const text = ((): string => {
     switch (status.state) {
       case 'unsupported': return 'Updates work in the installed app (not in a development run).';
       case 'checking': return 'Looking for a newer version…';
       case 'none': return 'You have the latest version.';
-      case 'available': return `Version ${status.version ?? ''} is available.`;
-      case 'downloading': return `Downloading version ${status.version ?? ''}… ${Math.round(status.percent ?? 0)}%`;
-      case 'ready': return `Version ${status.version ?? ''} is ready. Restart to finish.`;
+      case 'available': return `Version ${status.version ?? ''} is available.${size === '' ? '' : ` Up to ${size} to download — usually much less, because only the changed parts are fetched.`}`;
+      case 'downloading': return `Downloading version ${status.version ?? ''}… ${Math.round(status.percent ?? 0)}%${size === '' ? '' : ` of ${size}`}${status.sizeKind === 'update' ? ' (this update only)' : ''}${speed === '' ? '' : ` · ${speed}/s`}`;
+      case 'ready': return `Version ${status.version ?? ''} is ready${status.sizeKind === 'update' && size !== '' ? ` (${size} downloaded)` : ''}. Restart to finish.`;
+      case 'installing': return `Restarting to install version ${status.version ?? ''}…`;
       case 'error': return status.message ?? 'Could not check for updates right now.';
       default: return 'Not checked yet.';
     }
   })();
+  const retryable = status.state === 'error' && status.version !== undefined;
   return (
     <section className="nx-card" aria-labelledby="set-updates">
       <h2 className="nx-h2" id="set-updates">Updates</h2>
       <Setting title={`Nova Player ${status.currentVersion}`} hint={text}>
-        <span data-testid="update-status" data-state={status.state}>
-          {status.state === 'available' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" onClick={() => void updates.getState().download()}>Download</button>}
-          {status.state === 'ready' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" onClick={() => void updates.getState().install()}>Restart &amp; update</button>}
+        <span data-testid="update-status" data-state={status.state} data-size-kind={status.sizeKind} style={{ display: 'inline-flex', gap: 8, flexWrap: 'wrap' }}>
+          {status.state === 'available' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" data-testid="update-download" onClick={() => void updates.getState().download()}>Download{size === '' ? '' : ` (up to ${size})`}</button>}
+          {status.state === 'ready' && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" data-testid="update-install" onClick={() => void updates.getState().install()}>Restart &amp; update</button>}
+          {retryable && <button type="button" className="nx-btn nx-btn--small nx-btn--primary" data-testid="update-retry" onClick={() => void updates.getState().download()}>Retry download</button>}
           {status.state !== 'available' && status.state !== 'ready' && (
             <button type="button" className="nx-btn nx-btn--small" disabled={busy || status.state === 'unsupported'} onClick={() => void updates.getState().check()}>Check for updates</button>
           )}
         </span>
       </Setting>
+      {status.state === 'downloading' && (
+        <div className="nx-progress" role="progressbar" aria-label="Downloading the update" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(status.percent ?? 0)} data-testid="update-progress"><i style={{ width: `${status.percent ?? 0}%` }} /></div>
+      )}
       <Setting title="Check automatically" hint="Once after launch, Nova Player asks GitHub if a newer version exists. Nothing else is sent. Updates are never installed without your click.">
         <Switch label="Check for updates automatically" checked={auto} onChange={(v) => prefs.getState().setAutoUpdateCheck(v)} />
       </Setting>
@@ -127,7 +135,19 @@ function Slider({ value, min, max, step = 1, onChange, label, format }: { value:
   );
 }
 
+interface SettingsSection { readonly id: SectionId; readonly label: string; readonly icon: IconName; readonly content: ReactNode }
+type SectionId = 'appearance' | 'playback' | 'lyrics' | 'performance' | 'library' | 'shortcuts' | 'updates';
+/** Remembered while the app runs, so coming back to Settings lands on the section you were in. */
+const SECTION_IDS: readonly SectionId[] = ['appearance', 'playback', 'lyrics', 'performance', 'library', 'shortcuts', 'updates'];
+/** Remembered while the app runs, so coming back to Settings lands on the section you were in. */
+const lastSection = new Map<'current', SectionId>();
+const rememberedSection = (): SectionId => SECTION_IDS.find((id) => id === lastSection.get('current')) ?? 'appearance';
+const rememberSection = (id: SectionId): void => void lastSection.set('current', id);
+
 export function SettingsView() {
+  const [active, setActiveState] = useState<SectionId>(rememberedSection);
+  const setActive = (id: SectionId): void => { rememberSection(id); setActiveState(id); };
+  const updateReady = useUpdates((u) => u.status.state === 'available' || u.status.state === 'ready');
   const { theme, prefs, wallpaper: wallpaperStore, library, collections } = useServices();
   const actions = useActions();
   const mode = useStore(theme, (s) => s.mode);
@@ -147,10 +167,9 @@ export function SettingsView() {
   const historyCount = useCollections((s) => s.history.items.length);
   const hasWallpaper = wallpaper?.status === 'set';
 
-  return (
-    <div className="nx-page nx-settings" data-testid="view-settings">
-      <h1 className="nx-h1">Settings</h1>
-
+  const sections: readonly SettingsSection[] = [
+    { id: 'appearance', label: 'Appearance', icon: 'image', content: (
+      <>
       <section className="nx-card" aria-labelledby="set-appearance">
         <h2 className="nx-h2" id="set-appearance">Appearance</h2>
         <Setting title="Theme" hint="Dark is easiest on the eyes at night; Light suits a bright room.">
@@ -213,7 +232,10 @@ export function SettingsView() {
           Limits: PNG or JPEG, up to 12 MB, at least 800 × 450 and at most 10,000 pixels on a side. The picture is copied into Nova Player at a reduced size; your original file is never changed.
         </p>
       </section>
-
+      </>
+    ) },
+    { id: 'playback', label: 'Playback', icon: 'play', content: (
+      <>
       <section className="nx-card" aria-labelledby="set-audio" data-testid="audio-settings">
         <h2 className="nx-h2" id="set-audio">Audio</h2>
         <h3 className="nx-h3" style={{ margin: '4px 0 8px' }}>Equalizer</h3>
@@ -221,16 +243,20 @@ export function SettingsView() {
         <Setting title="Playback speed" hint="Pitch stays natural.">
           <Chips label="Playback speed" value={String(p.speed)} options={SPEEDS.map((s) => ({ id: String(s), label: s === 1 ? 'Normal' : `${s}×` }))} onChange={(value) => prefs.getState().setSpeed(Number(value))} />
         </Setting>
-      </section>
 
-      <section className="nx-card" aria-labelledby="set-visuals" data-testid="visual-settings">
-        <h2 className="nx-h2" id="set-visuals">Visuals &amp; performance</h2>
-        <Setting title="Spectrum style">
-          <Chips<VisualizerStyle> label="Spectrum style" value={p.visualizer} options={[{ id: 'bars', label: 'Bars' }, { id: 'wave', label: 'Wave' }, { id: 'ring', label: 'Ring' }]} onChange={(value) => prefs.getState().setVisualizer(value)} />
+        <Setting title="Fade between songs" hint="Fades out at the end of a song and in at the start of the next (songs under about 20 s are left alone).">
+          <Chips<string> label="Fade between songs" value={String(p.trackFadeSec)} onChange={(v) => prefs.getState().setTrackFadeSec(Number(v))} options={[{ id: '0', label: 'Off' }, { id: '2', label: '2 s' }, { id: '4', label: '4 s' }, { id: '6', label: '6 s' }]} />
         </Setting>
-        <Setting title="Spectrum in the player bar"><Switch label="Spectrum in the player bar" checked={p.dockSpectrum} onChange={(value) => prefs.getState().setDockSpectrum(value)} /></Setting>
+        <Setting title="Gentle sleep timer" hint="Lowers the volume over the last 20 seconds before the sleep timer stops the music."><Switch label="Gentle sleep timer" checked={p.sleepFade} onChange={(v) => prefs.getState().setSleepFade(v)} /></Setting>
+      </section>
+      </>
+    ) },
+    { id: 'lyrics', label: 'Lyrics', icon: 'lyrics', content: (
+      <>
+      <section className="nx-card" data-testid="visual-settings" aria-labelledby="set-lyrics">
+        <h2 className="nx-h2" id="set-lyrics">Lyrics</h2>
         <Setting title="Lyrics Mode backdrop" hint="What moves behind the lyrics in Lyrics Mode.">
-          <Chips<LyricsBackdrop> label="Lyrics Mode backdrop" value={p.lyricsBackdrop} options={[{ id: 'particles', label: 'Particles' }, { id: 'aurora', label: 'Aurora glow' }, { id: 'plain', label: 'Still' }]} onChange={(value) => prefs.getState().setLyricsBackdrop(value)} />
+          <Chips<LyricsBackdrop> label="Lyrics Mode backdrop" value={p.lyricsBackdrop} options={[{ id: 'particles', label: 'Particles' }, { id: 'plain', label: 'Still' }]} onChange={(value) => prefs.getState().setLyricsBackdrop(value)} />
         </Setting>
         <Setting title="Blur lines not being sung" hint="Soft depth effect on the surrounding lyrics."><Switch label="Blur lines not being sung" checked={p.lyricsDepthBlur} onChange={(value) => prefs.getState().setLyricsDepthBlur(value)} /></Setting>
         <Setting title="Line animation" hint="How the next line arrives. Apple glides; Karaoke lifts and wipes colour.">
@@ -244,18 +270,28 @@ export function SettingsView() {
           <Chips<LyricsCase> label="Letter case" value={p.lyricsCase} onChange={(v) => prefs.getState().setLyricsCase(v)} options={[{ id: 'normal', label: 'Normal' }, { id: 'upper', label: 'CAPS' }, { id: 'lower', label: 'small' }, { id: 'small-caps', label: 'Small caps' }, { id: 'capitalize', label: 'Title Case' }]} />
         </Setting>
         <Setting title="Lyrics font"><Chips<LyricsFont> label="Lyrics font" value={p.lyricsFont} onChange={(v) => prefs.getState().setLyricsFont(v)} options={[{ id: 'default', label: 'Default' }, { id: 'serif', label: 'Serif' }, { id: 'rounded', label: 'Rounded' }, { id: 'mono', label: 'Mono' }]} /></Setting>
+      </section>
+      </>
+    ) },
+    { id: 'performance', label: 'Performance', icon: 'speed', content: (
+      <>
+      <section className="nx-card" aria-labelledby="set-perf">
+        <h2 className="nx-h2" id="set-perf">Visuals &amp; performance</h2>
+        <Setting title="Spectrum style">
+          <Chips<VisualizerStyle> label="Spectrum style" value={p.visualizer} options={[{ id: 'bars', label: 'Bars' }, { id: 'wave', label: 'Wave' }, { id: 'ring', label: 'Ring' }]} onChange={(value) => prefs.getState().setVisualizer(value)} />
+        </Setting>
+        <Setting title="Spectrum in the player bar"><Switch label="Spectrum in the player bar" checked={p.dockSpectrum} onChange={(value) => prefs.getState().setDockSpectrum(value)} /></Setting>
         <Setting title="Beat effect" hint="How strongly the beat moves the cover, backdrop glow and particles.">
           <Chips<BeatIntensity> label="Beat effect" value={p.beatIntensity} onChange={(v) => prefs.getState().setBeatIntensity(v)} options={[{ id: 'off', label: 'Off' }, { id: 'subtle', label: 'Subtle' }, { id: 'normal', label: 'Normal' }, { id: 'strong', label: 'Strong' }]} />
         </Setting>
-        <Setting title="Fade between songs" hint="Fades out at the end of a song and in at the start of the next (songs under about 20 s are left alone).">
-          <Chips<string> label="Fade between songs" value={String(p.trackFadeSec)} onChange={(v) => prefs.getState().setTrackFadeSec(Number(v))} options={[{ id: '0', label: 'Off' }, { id: '2', label: '2 s' }, { id: '4', label: '4 s' }, { id: '6', label: '6 s' }]} />
-        </Setting>
-        <Setting title="Gentle sleep timer" hint="Lowers the volume over the last 20 seconds before the sleep timer stops the music."><Switch label="Gentle sleep timer" checked={p.sleepFade} onChange={(v) => prefs.getState().setSleepFade(v)} /></Setting>
         <Setting title="Performance" hint="Auto lowers effects by itself on slower computers. Low is the lightest.">
           <Chips<PerformanceMode> label="Performance" value={p.performance} options={[{ id: 'auto', label: 'Auto' }, { id: 'high', label: 'High' }, { id: 'balanced', label: 'Balanced' }, { id: 'low', label: 'Low' }]} onChange={(value) => prefs.getState().setPerformance(value)} />
         </Setting>
       </section>
-
+      </>
+    ) },
+    { id: 'library', label: 'Library', icon: 'folder', content: (
+      <>
       <section className="nx-card" aria-labelledby="set-library" data-testid="library-settings">
         <h2 className="nx-h2" id="set-library">Library</h2>
         {roots.length === 0 && <p className="nx-muted" style={{ margin: 0 }}>No music folders yet.</p>}
@@ -291,9 +327,10 @@ export function SettingsView() {
           <button type="button" className="nx-btn nx-btn--small" data-testid="reset-prefs" onClick={() => { prefs.getState().resetAll(); theme.getState().setMode('dark'); theme.getState().setAccent('dynamic'); theme.getState().setReduceMotion(false); theme.getState().setLyricsSize(34); void collections; }}>Reset</button>
         </Setting>
       </section>
-
-      <UpdatesSection />
-
+      </>
+    ) },
+    { id: 'shortcuts', label: 'Shortcuts', icon: 'bars', content: (
+      <>
       <section className="nx-card" aria-labelledby="set-keys">
         <h2 className="nx-h2" id="set-keys">Keyboard shortcuts</h2>
         <ShortcutEditor />
@@ -303,6 +340,29 @@ export function SettingsView() {
           ))}
         </div>
       </section>
+      </>
+    ) },
+    { id: 'updates', label: 'Updates', icon: 'refresh', content: <UpdatesSection /> },
+  ];
+  const current = sections.find((section) => section.id === active) ?? sections[0];
+
+  return (
+    <div className="nx-page nx-settings" data-testid="view-settings">
+      <h1 className="nx-h1">Settings</h1>
+      <div className="nx-settings-layout">
+        <nav className="nx-settings-nav" aria-label="Settings sections" data-testid="settings-nav">
+          {sections.map((section) => (
+            <button key={section.id} type="button" className="nx-settings-tab" aria-current={section.id === current?.id ? 'page' : undefined} data-testid={`settings-tab-${section.id}`} onClick={() => setActive(section.id)}>
+              <Icon name={section.icon} size={18} />
+              <span>{section.label}</span>
+              {section.id === 'updates' && updateReady && <span className="nx-nav-dot" aria-label="An update is available" role="img" />}
+            </button>
+          ))}
+        </nav>
+        <div className="nx-settings-pane" key={current?.id} data-testid={`settings-pane-${current?.id}`}>
+          {current?.content}
+        </div>
+      </div>
     </div>
   );
 }

@@ -1,15 +1,18 @@
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { GroupDto, GroupKindDto, PlaybackContextDto } from '@nova/shared';
-import { formatDuration, plural } from '../../library/format.js';
+import { formatDuration, formatTotal, plural } from '../../library/format.js';
 import { useLibraryStore } from '../../library/LibraryStoreProvider.js';
-import { useActions } from '../actions.js';
+import { addFolderAndScan, useActions } from '../actions.js';
+import { Icon } from '../../theme/Icon.js';
 import { Cover } from '../Cover.js';
 import { Empty, ErrorNote, Hero, Loading, PlayButtons, Tile } from '../parts.js';
 import { useServices } from '../services.js';
 import { TrackList } from '../TrackList.js';
 
 export function SongsView() {
-  const { library } = useServices();
+  const { library, playback } = useServices();
+  const scanPhase = useLibraryStore((s) => s.scan.phase);
+  const scanning = scanPhase === 'running' || scanPhase === 'starting' || scanPhase === 'cancelling';
   const tracks = useLibraryStore((s) => s.tracks);
   const status = useLibraryStore((s) => s.tracksStatus);
   const error = useLibraryStore((s) => s.tracksError);
@@ -20,12 +23,20 @@ export function SongsView() {
   useEffect(() => library.getState().setView('tracks'), [library]);
 
   const context: PlaybackContextDto = { kind: 'library', sort };
+  const totalSeconds = useMemo(() => tracks.reduce((sum, track) => sum + (track.durationSeconds ?? 0), 0), [tracks]);
   return (
     <div className="nx-page" data-testid="view-songs">
-      <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: 12 }}>
-        <h1 className="nx-h1">Songs</h1>
-        <span className="nx-muted">{plural(tracks.length, 'song')}</span>
-      </div>
+      <header className="nx-songs-head" data-testid="songs-header">
+        <div className="nx-songs-title">
+          <h1 className="nx-h1">Songs</h1>
+          <span className="nx-muted" data-testid="songs-summary">{[plural(tracks.length, 'song'), formatTotal(totalSeconds)].filter((part) => part !== '').join(' · ')}</span>
+        </div>
+        <div className="nx-songs-actions">
+          <PlayButtons label="all songs" disabled={tracks.length === 0} onPlay={() => { const first = tracks[0]; if (first !== undefined) void actions.playTrack(first.id, context); }} onShuffle={() => { const first = tracks[0]; if (first !== undefined) void playback.getState().setShuffle(true).then(() => actions.playTrack(first.id, context)); }} />
+          <button type="button" className="nx-btn" data-testid="songs-add-folder" disabled={scanning} onClick={() => void addFolderAndScan(library)}><Icon name="folder" size={16} /> <span className="nx-btn-text">Add folder</span></button>
+          <button type="button" className="nx-btn" data-testid="songs-scan" disabled={scanning || roots === 0} aria-label="Scan library" onClick={() => void library.getState().startScan()}><Icon name="refresh" size={16} /> <span className="nx-btn-text">{scanning ? 'Scanning…' : 'Scan'}</span></button>
+        </div>
+      </header>
       {error !== undefined && <ErrorNote message={error.message} onRetry={() => library.getState().retryBrowse()} />}
       {status === 'loading' && tracks.length === 0 ? (
         <Loading />

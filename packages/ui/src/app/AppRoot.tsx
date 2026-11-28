@@ -12,7 +12,7 @@ import { QueueDrawer } from './QueueDrawer.js';
 import { Sidebar } from './Sidebar.js';
 import { Topbar } from './Topbar.js';
 import { LyricStudio } from '../lyricstudio/LyricStudio.js';
-import { ContextMenuLayer, ModalLayer, PopoverLayer, ToastLayer } from './overlays.js';
+import { ContextMenuLayer, ModalLayer, PopoverLayer, ToastLayer, UpdateRestartOverlay } from './overlays.js';
 import { ScrollContext } from './scroll.js';
 import { SPEEDS } from '../prefs/prefs-store.js';
 import { resolveShortcut } from './shortcuts.js';
@@ -270,6 +270,7 @@ export function AppRoot() {
       <LyricStudio />
       <ToastLayer />
       <Hud />
+      <UpdateRestartOverlay />
       <Tooltips />
     </div>
   );

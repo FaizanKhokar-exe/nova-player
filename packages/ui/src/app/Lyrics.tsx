@@ -78,22 +78,79 @@ export function Lyrics() {
 
   const scroller = useRef<HTMLDivElement | null>(null);
 
+  // --- Following the sung line -------------------------------------------------------------------------------------------
+  // The list glides to each new line with its own easing (the browser's built-in smooth scroll restarts, and stutters, every time
+  // a new line arrives while the last glide is still running). It stops the moment the listener takes over.
+  const glide = useRef<{ frame: number; target: number }>({ frame: 0, target: 0 });
+  const stopGlide = useCallback(() => {
+    cancelAnimationFrame(glide.current.frame);
+    glide.current.frame = 0;
+  }, []);
+  const scrollToTop = useCallback((wanted: number, instant: boolean) => {
+    const container = scroller.current;
+    if (container === null) return;
+    const target = Math.max(0, Math.min(wanted, container.scrollHeight - container.clientHeight));
+    glide.current.target = target;
+    if (instant || document.documentElement.dataset['reduceMotion'] === 'true') {
+      stopGlide();
+      container.scrollTop = target;
+      return;
+    }
+    if (glide.current.frame !== 0) return; // already gliding: it simply has a new target
+    let last = performance.now();
+    const step = (now: number): void => {
+      const dt = Math.min(64, now - last);
+      last = now;
+      const diff = glide.current.target - container.scrollTop;
+      if (Math.abs(diff) < 1.2) {
+        container.scrollTop = glide.current.target;
+        glide.current.frame = 0;
+        return;
+      }
+      container.scrollTop += diff * (1 - Math.exp(-dt / 150));
+      glide.current.frame = requestAnimationFrame(step);
+    };
+    glide.current.frame = requestAnimationFrame(step);
+  }, [stopGlide]);
+  useEffect(() => stopGlide, [stopGlide]);
+
   const [detachedFor, setDetachedFor] = useState<string | undefined>(undefined);
+  const [away, setAway] = useState<'above' | 'below' | undefined>(undefined);
   const detachTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const detached = detachedFor !== undefined && detachedFor === trackId;
 
-  const centre = useCallback((index: number, behavior: ScrollBehavior) => {
+  const rowTop = useCallback((index: number): number | undefined => {
     const container = scroller.current;
-    if (container === null || index < 0) return;
-    const row = container.querySelector<HTMLElement>(`[data-index="${index}"]`);
-    if (row === null || typeof container.scrollTo !== 'function') return;
-    const top = row.offsetTop - container.clientHeight * 0.38 + row.offsetHeight / 2;
-    container.scrollTo({ top, behavior });
+    const row = container?.querySelector<HTMLElement>(`[data-index="${index}"]`);
+    if (container === null || container === undefined || row === null || row === undefined) return undefined;
+    return row.offsetTop - container.clientHeight * 0.38 + row.offsetHeight / 2;
   }, []);
+  const centre = useCallback((index: number, instant: boolean) => {
+    if (index < 0) return;
+    const top = rowTop(index);
+    if (top !== undefined) scrollToTop(top, instant);
+  }, [rowTop, scrollToTop]);
 
   useEffect(() => {
-    if (!detached) centre(activeIndex, activeIndex <= 0 ? 'auto' : 'smooth');
+    if (!detached) centre(activeIndex, activeIndex <= 0);
   }, [activeIndex, detached, trackId, lines, centre]);
+
+  // "Jump to now" is shown exactly while the sung line is out of the comfortable middle of the view, and says which way it is.
+  const measure = useCallback(() => {
+    const container = scroller.current;
+    const top = activeIndex < 0 ? undefined : rowTop(activeIndex);
+    if (container === null || top === undefined) return setAway(undefined);
+    const delta = top - container.scrollTop;
+    setAway(Math.abs(delta) > container.clientHeight * 0.3 ? (delta < 0 ? 'above' : 'below') : undefined);
+  }, [activeIndex, rowTop]);
+  useEffect(() => { if (detached) measure(); }, [detached, measure, lines]);
+  const shownAway = detached ? away : undefined;
+  const measureFrame = useRef(0);
+  const onScroll = useCallback(() => {
+    if (!detached || measureFrame.current !== 0) return;
+    measureFrame.current = requestAnimationFrame(() => { measureFrame.current = 0; measure(); });
+  }, [detached, measure]);
+  useEffect(() => () => cancelAnimationFrame(measureFrame.current), []);
 
   // The sweep: --p (0..100%) on the sung line, advanced every frame between the ~4 Hz position reports.
   useEffect(() => {
@@ -119,11 +176,20 @@ export function Lyrics() {
     };
   }, [activeIndex, lines, playback, speed, playing]);
 
+  /** The listener scrolls by hand (wheel, touch, keys): stop following, and drift back by itself after a quiet while. */
   const detach = useCallback(() => {
+    stopGlide();
     setDetachedFor(trackId);
     if (detachTimer.current !== undefined) clearTimeout(detachTimer.current);
-    detachTimer.current = setTimeout(() => setDetachedFor(undefined), 6_000); // drifts back by itself
-  }, [trackId]);
+    detachTimer.current = setTimeout(() => setDetachedFor(undefined), 8_000);
+  }, [trackId, stopGlide]);
+  const rejoin = useCallback(() => {
+    if (detachTimer.current !== undefined) clearTimeout(detachTimer.current);
+    setDetachedFor(undefined);
+  }, []);
+  const onKeyScroll = useCallback((event: React.KeyboardEvent) => {
+    if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(event.key)) detach();
+  }, [detach]);
   useEffect(
     () => () => {
       if (detachTimer.current !== undefined) clearTimeout(detachTimer.current);
@@ -131,7 +197,7 @@ export function Lyrics() {
     [],
   );
 
-  const onSeek = useCallback((line: LyricLineDto) => seekMs(lyricSeekMs(line)), [seekMs]);
+  const onSeek = useCallback((line: LyricLineDto) => { rejoin(); seekMs(lyricSeekMs(line)); }, [seekMs, rejoin]);
   const create = (
     <button type="button" className="nx-btn nx-btn--primary" disabled={action.busy} data-testid="create-lyrics" onClick={() => studio.getState().openStudio()}>
       <Icon name="sparkles" size={16} /> Create synced lyrics…
@@ -153,7 +219,7 @@ export function Lyrics() {
   else if (lyrics.availability === 'unreadable') body = <div className="nx-lyrics-empty" data-testid="lyrics-unreadable"><span>This lyrics file couldn’t be read.</span>{attach}</div>;
   else {
     body = (
-      <div key={trackId} ref={scroller} className="nx-lyrics" role="list" aria-label="Lyrics" data-testid="lyrics-list" onWheel={detach} onTouchMove={detach}>
+      <div key={trackId} ref={scroller} className="nx-lyrics" role="list" aria-label="Lyrics" data-testid="lyrics-list" onWheel={detach} onTouchMove={detach} onKeyDown={onKeyScroll} onScroll={onScroll}>
         {lines.map((line, index) => (
           <Line key={`${index}-${line.timeMs}`} line={line} index={index} distance={activeIndex < 0 ? index + 1 : index - activeIndex} active={index === activeIndex} depthBlur={depthBlur} sung={sung} reveal={detached} singMs={singDurationMs(line.text, (lines[index + 1]?.timeMs ?? line.timeMs + 6_000) - line.timeMs)} onSeek={onSeek} />
         ))}
@@ -165,9 +231,9 @@ export function Lyrics() {
   return (
     <section className="nx-np-right" aria-label="Lyrics" data-testid="lyrics-panel" data-anim={animation} data-align={align} data-case={textCase} data-font={font} data-playing={playing ? 'true' : 'false'} data-status={lyrics.status === 'ready' ? (lyrics.availability ?? 'ready') : lyrics.status}>
       {body}
-      {detached && found && (
-        <button type="button" className="nx-btn nx-lyrics-jump" style={{ background: 'rgba(255,255,255,.2)', color: '#fff', borderColor: 'transparent', backdropFilter: 'blur(10px)' }} data-testid="lyrics-jump" onClick={() => { setDetachedFor(undefined); centre(activeIndex, 'smooth'); }}>
-          <Icon name="down" size={15} /> Jump to now
+      {found && (
+        <button type="button" className="nx-btn nx-lyrics-jump" data-show={detached && away !== undefined ? 'true' : 'false'} data-away={shownAway} tabIndex={detached && away !== undefined ? 0 : -1} aria-hidden={detached && away !== undefined ? undefined : true} data-testid="lyrics-jump" onClick={() => { rejoin(); centre(activeIndex, false); }}>
+          <Icon name={shownAway === 'above' ? 'chevronUp' : 'down'} size={15} /> Jump to now
         </button>
       )}
     </section>

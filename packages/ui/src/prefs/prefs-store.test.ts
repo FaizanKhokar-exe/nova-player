@@ -27,6 +27,10 @@ describe('prefs store', () => {
     createPrefsStore(storage).getState().setSungLines('hide');
     expect(createPrefsStore(storage).getState().sungLines).toBe('hide');
   });
+  it('the removed Aurora glow backdrop falls back to particles; plain is kept', () => {
+    expect(createPrefsStore(memory(JSON.stringify({ lyricsBackdrop: 'aurora' }))).getState().lyricsBackdrop).toBe('particles');
+    expect(createPrefsStore(memory(JSON.stringify({ lyricsBackdrop: 'plain' }))).getState().lyricsBackdrop).toBe('plain');
+  });
   it('persists and reloads', () => {
     const storage = memory();
     const a = createPrefsStore(storage);

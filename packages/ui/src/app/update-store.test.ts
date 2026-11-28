@@ -21,4 +21,18 @@ describe('update store', () => {
     await store.getState().check();
     expect(store.getState().status.state).toBe('unsupported');
   });
+  it('shows "installing" at once on install, and takes it back if the install call fails', async () => {
+    let fail = false;
+    const bridge = { invoke: vi.fn(async (channel: string) => { if (channel === 'update:install' && fail) throw new Error('x'); return { ok: true, value: { state: channel === 'update:install' ? 'installing' : 'ready', currentVersion: '1.0.0', version: '1.1.0' } }; }) } as unknown as NovaBridge;
+    const store = createUpdateStore(bridge);
+    await store.getState().refresh();
+    const pending = store.getState().install();
+    expect(store.getState().status.state).toBe('installing');
+    await pending;
+    expect(store.getState().status.state).toBe('installing');
+    await store.getState().refresh();
+    fail = true;
+    await store.getState().install();
+    expect(store.getState().status.state).toBe('ready');
+  });
 });

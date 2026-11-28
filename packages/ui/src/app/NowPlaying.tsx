@@ -22,7 +22,7 @@ const MODES: ReadonlyArray<{ id: NowPlayingLayout; label: string; icon: IconName
  * The full-screen player. Three layouts:
  *  - Now Playing: cover, controls and a live spectrum on the left, the lyrics beside them.
  *  - Lyrics Mode: a distinct, immersive layout - big lyrics over a backdrop that MOVES WITH THE BEAT
- *    (particles by default; aurora glow or still in Settings).
+ *    (particles by default; plain in Settings).
  *  - Visualizer: the cover and a large spectrum.
  * The backdrop is the cover art itself, blurred, so every song gets its own colours.
  */
@@ -72,7 +72,7 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
     const element = root.current;
     if (element === null || reduceMotion || beatIntensity === 'off') return;
     const gain = { off: 0, subtle: 0.2, normal: 0.4, strong: 0.7 }[beatIntensity];
-    const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover, .nx-np-pulse'));
+    const targets = Array.from(element.querySelectorAll<HTMLElement>('.nx-np-cover'));
     // What is drawn follows the raw pulse through a soft envelope: it swells over a few frames instead of snapping on, and lets go
     // more slowly, so quick successions of hits read as a gentle breathing rather than flashing.
     let shown = 0;
@@ -94,7 +94,6 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
 
   const showLyrics = layout !== 'art';
   const particles = layout === 'lyrics' && backdrop === 'particles';
-  const aurora = layout === 'lyrics' && backdrop !== 'plain';
 
   return (
     <div ref={root} className="nx-np" data-layout={layout} data-closing={closing ? 'true' : undefined} inert={closing || undefined} data-testid="now-playing" role="dialog" aria-modal="true" aria-label="Now Playing">
@@ -105,7 +104,6 @@ function NowPlayingLayer({ closing }: { closing: boolean }) {
           <div className="nx-np-art nx-np-art--fallback" data-testid="np-backdrop" />
         )}
         <div className="nx-np-vignette" />
-        {aurora && <div className="nx-np-pulse" />}
         {particles && <ParticleField reduceMotion={reduceMotion} />}
       </div>
 

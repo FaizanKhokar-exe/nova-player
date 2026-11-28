@@ -142,7 +142,7 @@ button { cursor: pointer; }
 .nx-glow { position: absolute; inset: 0; background: radial-gradient(900px 560px at 88% -8%, rgba(var(--accent-primary-rgb), 0.24), transparent 62%), radial-gradient(760px 520px at -4% 108%, rgba(var(--accent-secondary-rgb), 0.18), transparent 62%); transition: opacity 600ms var(--ease-out); }
 .nx-app[data-wallpaper='true'] { --pane-bg: rgba(var(--bg-rgb), 0.62); }
 
-.nx-sidebar { grid-row: 1; grid-column: 1; display: flex; flex-direction: column; gap: 6px; padding: 18px 12px 12px; background: var(--sidebar-bg); border-right: 1px solid var(--border); min-height: 0; overflow-y: auto; overflow-x: hidden; z-index: 3; }
+.nx-sidebar { position: relative; grid-row: 1; grid-column: 1; display: flex; flex-direction: column; gap: 6px; padding: 18px 12px 12px; background: var(--sidebar-bg); border-right: 1px solid var(--border); min-height: 0; overflow-y: auto; overflow-x: hidden; z-index: 3; }
 .nx-brand { display: flex; align-items: center; gap: 12px; padding: 2px 10px 14px; }
 .nx-brand-mark { width: 36px; height: 36px; border-radius: 12px; background: var(--gradient-brand); color: #fff; display: grid; place-items: center; font-family: var(--font-display); font-weight: 800; font-size: 18px; box-shadow: 0 8px 24px rgba(var(--accent-primary-rgb), 0.45); flex: none; }
 .nx-brand-name { font-family: var(--font-display); font-weight: 700; font-size: 18px; letter-spacing: -0.3px; }
@@ -150,14 +150,13 @@ button { cursor: pointer; }
 .nx-nav-item { display: flex; align-items: center; gap: 13px; width: 100%; padding: 10px 12px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 500; text-align: left; position: relative; transition: background 140ms var(--ease-out), color 140ms var(--ease-out); }
 .nx-nav-item:hover { background: var(--surface); color: var(--text); }
 .nx-nav-item[aria-current='page'] { color: var(--text); background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.26), rgba(var(--accent-primary-rgb), 0.05)); }
-.nx-nav-item[aria-current='page']::before { content: ''; position: absolute; left: -12px; top: 10px; bottom: 10px; width: 3px; border-radius: 3px; background: var(--accent-primary); }
+
 .nx-nav-item svg { flex: none; }
 .nx-nav-count { margin-left: auto; font-size: 11px; color: var(--text-faint); font-variant-numeric: tabular-nums; }
 .nx-app[data-collapsed='true'] .nx-nav-text, .nx-app[data-collapsed='true'] .nx-nav-count, .nx-app[data-collapsed='true'] .nx-nav-label, .nx-app[data-collapsed='true'] .nx-brand-name, .nx-app[data-collapsed='true'] .nx-side-extra { display: none; }
 .nx-app[data-collapsed='true'] .nx-nav-item { justify-content: center; padding: 11px 0; }
 .nx-app[data-collapsed='true'] .nx-brand { justify-content: center; padding: 2px 0 14px; }
 @media (max-width: 920px) { .nx-nav-text, .nx-nav-count, .nx-nav-label, .nx-brand-name, .nx-side-extra { display: none; } .nx-nav-item { justify-content: center; padding: 11px 0; } .nx-brand { justify-content: center; padding: 2px 0 14px; } }
-.nx-side-playlists { display: flex; flex-direction: column; gap: 2px; min-height: 0; }
 .nx-side-foot { margin-top: auto; display: flex; flex-direction: column; gap: 8px; padding-top: 10px; }
 
 .nx-content { grid-row: 1; grid-column: 2; position: relative; min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--pane-bg); overflow: hidden; }
@@ -381,7 +380,6 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 .nx-np-art { position: absolute; inset: -18%; background-size: cover; background-position: center; filter: blur(70px) saturate(1.7) brightness(0.78); transform: translateZ(0) scale(1.1); transition: opacity 700ms var(--ease-out); }
 .nx-np-art--fallback { background: radial-gradient(60% 60% at 25% 30%, rgba(var(--accent-primary-rgb), 0.85), transparent 70%), radial-gradient(55% 55% at 80% 75%, rgba(var(--accent-secondary-rgb), 0.8), transparent 70%), rgb(var(--accent-deep-rgb)); filter: none; }
 .nx-np-vignette { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,.35), rgba(0,0,0,.05) 30%, rgba(0,0,0,.45) 100%); }
-.nx-np-pulse { position: absolute; inset: 0; background: radial-gradient(50% 50% at 28% 50%, rgba(var(--accent-highlight-rgb), 0.26), transparent 70%); mix-blend-mode: screen; opacity: var(--beat); will-change: opacity; } /* v0.11.3: the beat fades a fixed gradient (compositor-only) instead of repainting a new one every frame: same look */
 .nx-np-canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 .nx-np-top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 18px 26px; }
 .nx-np-modes { display: inline-flex; padding: 4px; border-radius: var(--r-pill); background: rgba(255,255,255,.12); backdrop-filter: blur(14px); gap: 2px; }
@@ -412,16 +410,19 @@ input[type='range'].nx-range:disabled { opacity: 0.4; cursor: default; }
 @media (max-width: 900px) { .nx-np-stage { grid-template-columns: 1fr !important; grid-template-rows: auto minmax(0, 1fr); padding: 0 20px 20px; gap: 18px; align-items: start; } .nx-np-left { max-width: 520px; flex-direction: row; flex-wrap: wrap; } .nx-np-cover { width: 120px !important; } }
 
 /* Lyrics - Apple-style: left-aligned, bold, the sung line bright, the rest dim and softly blurred by distance. */
-.nx-lyrics { position: relative; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 38vh 0 38vh; mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%); scroll-behavior: smooth; }
+.nx-lyrics { position: relative; flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; padding: 38vh 0 38vh; mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%); -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 16%, #000 84%, transparent 100%); scroll-behavior: auto; }
 .nx-lyrics::-webkit-scrollbar { display: none; }
-.nx-lyric { display: block; width: 100%; margin: 0; padding: 10px 18px; border: 0; background: transparent; color: var(--np-text); text-align: start; unicode-bidi: plaintext; font-family: var(--font-display); font-weight: 800; font-size: var(--lyric-size); line-height: 1.22; letter-spacing: -0.4px; border-radius: 16px; transform-origin: left center; opacity: var(--lyric-opacity, 0.4); filter: blur(var(--lyric-blur, 0px)); transform: scale(var(--lyric-scale, 0.96)); transition: opacity 420ms var(--ease-out), filter 420ms var(--ease-out), transform 420ms var(--ease-out), background 160ms; cursor: pointer; will-change: opacity, filter, transform; }
+.nx-lyric { display: block; width: 100%; margin: 0; padding: 10px 18px; border: 0; background: transparent; color: var(--np-text); text-align: start; unicode-bidi: plaintext; font-family: var(--font-display); font-weight: 800; font-size: var(--lyric-size); line-height: 1.22; letter-spacing: -0.4px; border-radius: 16px; transform-origin: left center; opacity: var(--lyric-opacity, 0.4); filter: blur(var(--lyric-blur, 0px)); transform: scale(var(--lyric-scale, 0.96)); transition: opacity 560ms var(--ease-out), filter 560ms var(--ease-out), transform 620ms var(--ease-out), background 160ms; cursor: pointer; will-change: opacity, transform; }
 .nx-lyric:hover { opacity: 0.9 !important; filter: none !important; background: rgba(255,255,255,.08); }
 .nx-lyric[data-state='current'] { --lyric-opacity: 1; --lyric-blur: 0px; --lyric-scale: 1; }
 .nx-lyric-fill { background: linear-gradient(90deg, #fff var(--p, 0%), rgba(255,255,255,.5) calc(var(--p, 0%) + 1%)); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
 .nx-lyric[data-state='current'] .nx-lyric-fill { text-shadow: none; filter: drop-shadow(0 0 18px rgba(255,255,255,.35)); }
 :root[data-reduce-motion='true'] .nx-lyric-fill { background: none; color: inherit; -webkit-text-fill-color: currentColor; }
 .nx-lyrics-empty { margin: auto; text-align: center; color: var(--np-muted); display: flex; flex-direction: column; gap: 14px; align-items: center; max-width: 380px; }
-.nx-lyrics-jump { position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); z-index: 3; }
+.nx-lyrics-jump { position: absolute; left: 50%; bottom: 14px; z-index: 3; background: rgba(255,255,255,.2); color: #fff; border-color: transparent; backdrop-filter: blur(10px); transform: translate3d(-50%, 0, 0); opacity: 1; transition: opacity var(--dur) var(--ease-out), transform var(--dur) var(--ease-out); }
+/* Always in the layout (so it never shifts anything), only faded in while the sung line is out of view. */
+.nx-lyrics-jump[data-show='false'] { opacity: 0; transform: translate3d(-50%, 10px, 0); pointer-events: none; }
+.nx-lyrics-jump[data-away='above'] { bottom: auto; top: 14px; }
 .nx-np[data-lyrics-size='sm'] { --lyric-size: 24px; }
 
 /* Lyrics Mode: lyrics are the show, the backdrop moves with the beat. */
@@ -457,23 +458,13 @@ input[type='range'].nx-range.nx-volume { width: 92px; flex: none; }
 /* ---- v0.11.1 sidebar: nothing in the column may shrink into its neighbour; the playlist list scrolls instead ---- */
 .nx-sidebar { overflow: hidden; }
 .nx-sidebar > * { flex: none; }
-.nx-sidebar > .nx-side-playlists { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; }
 .nx-sidebar > .nx-side-foot { margin-top: 0; border-top: 1px solid var(--border); padding-top: 10px; }
-.nx-side-actions { display: flex; gap: 8px; padding: 0 2px; }
-.nx-side-actions .nx-btn { flex: 1; min-width: 0; justify-content: center; white-space: nowrap; }
-.nx-side-actions .nx-btn:last-child { flex: none; }
 .nx-nav-item { min-height: 40px; }
 .nx-nav-item > svg { width: 20px; height: 20px; }
 .nx-app[data-collapsed='true'] .nx-sidebar { padding-inline: 10px; align-items: stretch; }
 .nx-app[data-collapsed='true'] .nx-nav-item { padding: 0; height: 44px; width: 100%; justify-content: center; }
-.nx-app[data-collapsed='true'] .nx-nav-item[aria-current='page']::before { left: -10px; }
 .nx-app[data-collapsed='true'] .nx-nav-item[aria-current='page'] { background: rgba(var(--accent-primary-rgb), 0.24); }
-.nx-app[data-collapsed='true'] .nx-side-actions { flex-direction: column; }
-.nx-app[data-collapsed='true'] .nx-side-actions .nx-btn { flex: none; height: 44px; padding: 0; }
-.nx-app[data-collapsed='true'] .nx-side-actions .nx-btn-text { display: none; }
-.nx-app[data-collapsed='true'] .nx-side-playlists { display: none; }
 .nx-app[data-collapsed='true'] .nx-side-foot { border-top: 0; }
-@media (max-width: 920px) { .nx-side-actions { flex-direction: column; } .nx-side-actions .nx-btn-text { display: none; } .nx-side-playlists { display: none; } }
 
 /* ---- dock: tinted by the current cover (opaque base so content never shows through) ---- */
 .nx-dock { background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.20), rgba(var(--accent-secondary-rgb), 0.10) 60%, rgba(var(--accent-primary-rgb), 0.14)), color-mix(in srgb, rgb(var(--accent-deep-rgb)) 55%, var(--dock-bg)); transition: background 500ms var(--ease-out); }
@@ -741,3 +732,68 @@ input, textarea, [contenteditable='true'], [data-selectable] { user-select: text
 /* Edit + heart always sit together at the end of the title row, so they never wander with the title's length. */
 .nx-dock-meta { flex: 1 1 auto; }
 .nx-dock-actions, .nx-np-actions { flex: none; display: flex; align-items: center; gap: 2px; }
+
+/* Sidebar: one accent bar glides between pages; labels fade instead of popping; entrance is a short stagger. */
+.nx-nav-bar { position: absolute; left: 0; top: 0; width: 3px; height: 22px; border-radius: 0 3px 3px 0; background: var(--accent-primary); opacity: 0; pointer-events: none; transition: transform 320ms var(--ease-out), opacity 160ms linear; will-change: transform; }
+.nx-nav-bar[data-on='true'] { opacity: 1; }
+.nx-nav-item { transition: background 160ms var(--ease-out), color 160ms var(--ease-out), transform 120ms var(--ease-out); }
+.nx-nav-item:active { transform: scale(0.97); }
+.nx-nav-item > svg { transition: transform 200ms var(--ease-out); }
+.nx-nav-item:hover > svg { transform: scale(1.08); }
+.nx-nav-dot { margin-left: auto; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-primary); box-shadow: 0 0 0 3px rgba(var(--accent-primary-rgb), 0.25); }
+.nx-sidebar > .nx-nav-item, .nx-side-foot > .nx-nav-item { animation: nx-side-in 360ms var(--ease-out) both; }
+.nx-sidebar > .nx-nav-item:nth-of-type(2) { animation-delay: 30ms; } .nx-sidebar > .nx-nav-item:nth-of-type(3) { animation-delay: 60ms; } .nx-sidebar > .nx-nav-item:nth-of-type(4) { animation-delay: 90ms; } .nx-sidebar > .nx-nav-item:nth-of-type(5) { animation-delay: 120ms; } .nx-sidebar > .nx-nav-item:nth-of-type(n+6) { animation-delay: 150ms; }
+@keyframes nx-side-in { from { opacity: 0; transform: translate3d(-10px, 0, 0); } to { opacity: 1; transform: none; } }
+:root[data-reduce-motion='true'] .nx-sidebar *, :root[data-reduce-motion='true'] .nx-nav-bar { animation: none !important; transition: none !important; }
+:root[data-perf='low'] .nx-sidebar > .nx-nav-item, :root[data-perf='low'] .nx-side-foot > .nx-nav-item { animation: none; }
+
+/* Songs page header: title + totals on the left, actions on the right; wraps cleanly when narrow. */
+.nx-songs-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px 16px; }
+.nx-songs-title { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.nx-songs-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+@media (max-width: 760px) { .nx-songs-actions .nx-btn-text { display: none; } }
+
+/* Settings: two panes (section list | one section). Collapses to a scrolling tab strip when narrow. */
+.nx-settings { max-width: 1040px; }
+.nx-settings-layout { display: grid; grid-template-columns: 200px minmax(0, 1fr); gap: 24px; align-items: start; }
+.nx-settings-nav { position: sticky; top: 0; display: flex; flex-direction: column; gap: 4px; }
+.nx-settings-tab { display: flex; align-items: center; gap: 12px; width: 100%; padding: 10px 12px; border: 0; border-radius: var(--r-md); background: transparent; color: var(--text-muted); font-size: 14px; font-weight: 500; text-align: left; transition: background 160ms var(--ease-out), color 160ms var(--ease-out), transform 120ms var(--ease-out); }
+.nx-settings-tab:hover { background: var(--surface); color: var(--text); }
+.nx-settings-tab:active { transform: scale(0.97); }
+.nx-settings-tab[aria-current='page'] { color: var(--text); background: linear-gradient(90deg, rgba(var(--accent-primary-rgb), 0.26), rgba(var(--accent-primary-rgb), 0.06)); }
+.nx-settings-tab svg { flex: none; }
+.nx-settings-pane { display: flex; flex-direction: column; gap: 22px; min-width: 0; animation: nx-pane-in 280ms var(--ease-out) both; }
+@keyframes nx-pane-in { from { opacity: 0; transform: translate3d(0, 8px, 0); } to { opacity: 1; transform: none; } }
+@media (max-width: 900px) {
+  .nx-settings-layout { grid-template-columns: minmax(0, 1fr); gap: 14px; }
+  .nx-settings-nav { position: static; flex-direction: row; overflow-x: auto; gap: 6px; padding-bottom: 4px; scrollbar-width: none; }
+  .nx-settings-tab { width: auto; flex: none; padding: 8px 12px; white-space: nowrap; }
+}
+@media (max-width: 760px) {
+  .nx-setting { flex-direction: column; align-items: stretch; gap: 8px; }
+  .nx-setting-control { flex-wrap: wrap; flex: 1 1 auto; }
+}
+
+/* Narrow windows (down to ~640 px): tighter gutters, smaller tiles, stacked hero, compact rail and player bar. */
+@media (max-width: 760px) {
+  .nx-app { --sidebar-w: 64px; --sidebar-w-collapsed: 64px; }
+  .nx-sidebar { padding-inline: 8px; }
+  .nx-topbar { padding: 0 14px; gap: 8px; }
+  .nx-grid { grid-template-columns: repeat(auto-fill, minmax(128px, 1fr)); gap: 18px 14px; }
+  .nx-hero { flex-direction: column; align-items: flex-start; gap: 16px; padding: 22px 16px 18px; margin: 0 -14px; }
+  .nx-dock { grid-template-columns: minmax(0, 1fr) auto; gap: 8px; }
+  .nx-page { gap: 20px; min-width: 0; }
+  .nx-page > * { min-width: 0; }
+}
+@media (max-width: 680px) {
+  .nx-dock-spectrum, .nx-volume, .nx-dock-right { display: none; }
+  .nx-np-cover { width: 96px !important; }
+}
+
+/* Update restart overlay: appears the moment "Restart & update" is clicked. Opacity/transform only. */
+.nx-restart { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 20px; background: rgba(8, 8, 12, 0.72); animation: nx-fade-in 220ms var(--ease-out) both; }
+.nx-restart-card { display: flex; flex-direction: column; align-items: center; gap: 12px; max-width: 380px; padding: 28px 26px; border-radius: var(--r-lg, 18px); background: var(--surface-solid, #1c1c24); border: 1px solid var(--border-strong); text-align: center; animation: nx-pane-in 320ms var(--ease-out) both; }
+.nx-restart-card p { margin: 0; }
+.nx-restart-spin { width: 34px; height: 34px; border-radius: 50%; border: 3px solid rgba(var(--accent-primary-rgb), 0.25); border-top-color: var(--accent-primary); animation: nx-spin 0.9s linear infinite; }
+@keyframes nx-spin { to { transform: rotate(360deg); } }
+@keyframes nx-fade-in { from { opacity: 0; } to { opacity: 1; } }

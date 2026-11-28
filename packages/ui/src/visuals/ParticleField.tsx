@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { useServices } from '../app/services.js';
 import { readAccents, useCanvasSize } from './canvas-utils.js';
-import { createParticles, stepParticles, type ParticleSystem } from './particles.js';
+import { aliveCount, createParticles, particleAlpha, stepParticles } from './particles.js';
 
 /** A soft round sprite in one accent colour, drawn once and reused for every particle (no per-frame gradients). */
 function makeSprite(rgb: string): HTMLCanvasElement {
@@ -19,12 +19,13 @@ function makeSprite(rgb: string): HTMLCanvasElement {
   return sprite;
 }
 
-const BASE_COUNT = 110;
+const POOL = 160;
 
 /**
- * Lyrics Mode's moving backdrop: glowing particles that drift with the music and burst on every beat. Draws from the
- * shared visual bus; its particle count and glow follow the performance mode, and it simply is not running when no
- * music plays or the window is hidden. With reduced motion it shows a still, dim field instead.
+ * Lyrics Mode's backdrop: glowing particles released by the music's beats and nothing else. Each detected beat sends out a
+ * burst (bigger for a harder hit) that flies outward and fades; with no beat the field stays empty. Draws from the shared
+ * visual bus; the burst size follows the performance mode, and it is not running when no music plays or the window is
+ * hidden. With reduced motion it draws nothing.
  */
 export function ParticleField({ reduceMotion = false }: { reduceMotion?: boolean }) {
   const { visuals } = useServices();
@@ -36,32 +37,32 @@ export function ParticleField({ reduceMotion = false }: { reduceMotion?: boolean
     const context = canvas?.getContext('2d');
     if (canvas === null || context === null || context === undefined) return;
     let sprites = readAccents().map(makeSprite);
-    let system: ParticleSystem | undefined;
-    let systemCount = 0;
+    const system = createParticles(POOL);
     let last: number | undefined;
     let frames = 0;
+    let wasDrawing = false;
 
     return visuals.subscribe((frame) => {
       const { width, height, dpr } = size.current;
       if (width < 2 || height < 2) return;
       if (frames++ % 90 === 0) sprites = readAccents().map(makeSprite); // the accents follow the cover
-      const wanted = Math.max(24, Math.round(BASE_COUNT * frame.budget.detail));
-      if (system === undefined || systemCount !== wanted) {
-        system = createParticles(wanted, width, height);
-        systemCount = wanted;
-      }
       const dt = last === undefined ? 0.016 : (frame.nowMs - last) / 1000;
       last = frame.nowMs;
-      stepParticles(system, { dt: reduceMotion ? 0 : dt, level: frame.levels.level, pulse: frame.levels.pulse, beat: !reduceMotion && frame.levels.beat, width, height });
+      if (reduceMotion) return;
+      stepParticles(system, { dt, beat: frame.levels.beat, strength: frame.levels.pulse, detail: frame.budget.detail, width, height });
 
+      const drawing = aliveCount(system) > 0;
+      if (!drawing && !wasDrawing) return; // an empty field costs nothing
+      wasDrawing = drawing;
       context.setTransform(dpr, 0, 0, dpr, 0, 0);
       context.clearRect(0, 0, width, height);
       context.globalCompositeOperation = frame.budget.glow ? 'lighter' : 'source-over';
       for (let i = 0; i < system.count; i += 1) {
+        const life = system.life[i] as number;
+        if (life <= 0) continue;
         const depth = system.depth[i] as number;
-        const glow = system.glow[i] as number;
-        const radius = ((system.size[i] as number) * (1 + glow * 1.6 + frame.levels.pulse * 0.25)) * 2.2;
-        context.globalAlpha = Math.min(1, (0.16 + depth * 0.4 + glow * 0.5) * (reduceMotion ? 0.6 : 1));
+        const radius = (system.size[i] as number) * (1.4 + (1 - life) * 0.5) * 2.2;
+        context.globalAlpha = Math.min(1, particleAlpha(life) * (0.28 + depth * 0.3 + (system.strength[i] as number) * 0.4));
         const sprite = sprites[system.tint[i] as number];
         if (sprite !== undefined) context.drawImage(sprite, (system.x[i] as number) - radius, (system.y[i] as number) - radius, radius * 2, radius * 2);
       }

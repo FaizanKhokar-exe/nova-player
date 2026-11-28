@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent } from 'react';
+import { useStore } from 'zustand';
 import { formatRemaining, SLEEP_CHOICES_MINUTES } from '../audio/audio-controls.js';
 import { useCollections } from '../collections/CollectionsStoreProvider.js';
 import { usePlaybackStore } from '../playback/PlaybackStoreProvider.js';
@@ -398,6 +399,22 @@ export function ToastLayer() {
           <span className="nx-text">{toast.text}</span>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Shown from the click on "Restart & update" until the app closes, so the window never looks frozen or half-dead. */
+export function UpdateRestartOverlay() {
+  const { updates } = useServices();
+  const status = useStore(updates, (s) => s.status);
+  if (status.state !== 'installing') return null;
+  return (
+    <div className="nx-restart" role="alertdialog" aria-modal="true" aria-label="Installing the update" data-testid="update-restart">
+      <div className="nx-restart-card">
+        <span className="nx-restart-spin" aria-hidden="true" />
+        <h2 className="nx-h2">Updating to version {status.version ?? ''}</h2>
+        <p className="nx-muted">Nova Player will close for a moment and open again by itself. Your music and settings stay exactly as they are.</p>
+      </div>
     </div>
   );
 }

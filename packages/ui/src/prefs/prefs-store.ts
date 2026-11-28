@@ -10,7 +10,7 @@ import { EQ_BANDS, EQ_PRESETS, clampDb } from '../audio/eq-presets.js';
 
 export type VisualizerStyle = 'bars' | 'wave' | 'ring';
 export type PerformanceMode = 'auto' | 'high' | 'balanced' | 'low';
-export type LyricsBackdrop = 'particles' | 'aurora' | 'plain';
+export type LyricsBackdrop = 'particles' | 'plain';
 /** How the next line arrives: Apple glides the whole list; Karaoke lifts the line and wipes colour across it. (The v0.13 "Magnet" style was removed; a saved "magnet" becomes Apple.) */
 export type LyricsAnimation = 'apple' | 'karaoke';
 /** What happens to lines already sung: dimmed (default), fading away over the next two lines, or gone at once. */
@@ -164,7 +164,7 @@ function sanitize(raw: unknown): Prefs {
     wallpaperEnabled: typeof p.wallpaperEnabled === 'boolean' ? p.wallpaperEnabled : DEFAULT_PREFS.wallpaperEnabled,
     wallpaperDim: num(p.wallpaperDim, DEFAULT_PREFS.wallpaperDim, WALLPAPER_DIM_RANGE.min, WALLPAPER_DIM_RANGE.max),
     wallpaperBlur: num(p.wallpaperBlur, DEFAULT_PREFS.wallpaperBlur, WALLPAPER_BLUR_RANGE.min, WALLPAPER_BLUR_RANGE.max),
-    lyricsBackdrop: oneOf(p.lyricsBackdrop, ['particles', 'aurora', 'plain'], DEFAULT_PREFS.lyricsBackdrop),
+    lyricsBackdrop: oneOf(p.lyricsBackdrop, ['particles', 'plain'], DEFAULT_PREFS.lyricsBackdrop),
     lyricsDepthBlur: typeof p.lyricsDepthBlur === 'boolean' ? p.lyricsDepthBlur : DEFAULT_PREFS.lyricsDepthBlur,
     lyricsSearchConsent: p.lyricsSearchConsent === true,
     lyricsAnimation: oneOf(p.lyricsAnimation, ['apple', 'karaoke'], DEFAULT_PREFS.lyricsAnimation),

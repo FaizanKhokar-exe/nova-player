@@ -32,15 +32,74 @@ describe('update service', () => {
         emit('update-downloaded', { version: '0.16.0' });
       },
     });
-    const service = createUpdateService({ updater: port, currentVersion: '0.15.2' });
+    const later: Array<() => void> = [];
+    const service = createUpdateService({ updater: port, currentVersion: '0.15.2', schedule: (run) => void later.push(run) });
     service.install();
     expect(port.quitAndInstall).not.toHaveBeenCalled();
     await service.download(); // nothing found yet: no download
     expect(port.downloadUpdate).not.toHaveBeenCalled();
     expect(await service.check()).toMatchObject({ state: 'available', version: '0.16.0' });
     expect(await service.download()).toMatchObject({ state: 'ready', version: '0.16.0', percent: 100 });
-    service.install();
+    expect(service.install().state).toBe('installing'); // the window can say "Restarting…" before the app closes
+    expect(port.quitAndInstall).not.toHaveBeenCalled();
+    later.forEach((run) => run());
     expect(port.quitAndInstall).toHaveBeenCalledWith(true, true);
+  });
+
+  it('shows the installer size before the download (an upper bound) and the real update size once it runs', async () => {
+    const { port, emit } = fakeUpdater({
+      check: async () => emit('update-available', { version: '2.0.0', files: [{ size: 90_000_000 }, { size: 120_000_000 }] }),
+      download: async () => {
+        emit('download-progress', { percent: 50, total: 6_000_000, transferred: 3_000_000, bytesPerSecond: 1_000_000 });
+        emit('update-downloaded', { version: '2.0.0' });
+      },
+    });
+    const service = createUpdateService({ updater: port, currentVersion: '1.0.0' });
+    expect(await service.check()).toMatchObject({ state: 'available', totalBytes: 120_000_000, sizeKind: 'full' });
+    await service.download();
+    expect(service.getStatus()).toMatchObject({ state: 'ready', totalBytes: 6_000_000, sizeKind: 'update' });
+  });
+
+  it('shows only the update size while downloading, not the whole app', async () => {
+    const { port, emit } = fakeUpdater({ check: async () => emit('update-available', { version: '2.0.0', files: [{ size: 120_000_000 }] }) });
+    const service = createUpdateService({ updater: port, currentVersion: '1.0.0' });
+    await service.check();
+    emit('download-progress', { percent: 10, total: 5_000_000, transferred: 500_000, bytesPerSecond: 250_000 });
+    expect(service.getStatus()).toMatchObject({ state: 'downloading', totalBytes: 5_000_000, sizeKind: 'update', downloadedBytes: 500_000, bytesPerSecond: 250_000 });
+  });
+
+  it('retries a failed download with one click, without checking again', async () => {
+    let attempt = 0;
+    const { port, emit } = fakeUpdater({
+      check: async () => emit('update-available', { version: '2.0.0' }),
+      download: async () => {
+        attempt += 1;
+        if (attempt === 1) throw new Error('read ECONNRESET');
+        emit('update-downloaded', { version: '2.0.0' });
+      },
+    });
+    const service = createUpdateService({ updater: port, currentVersion: '1.0.0' });
+    await service.check();
+    expect(await service.download()).toMatchObject({ state: 'error', version: '2.0.0' });
+    expect((await service.download()).state).toBe('ready');
+    expect(port.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives up on a check that never answers, with a calm sentence', async () => {
+    const { port } = fakeUpdater({ check: () => new Promise<void>(() => undefined) });
+    const service = createUpdateService({ updater: port, currentVersion: '1.0.0', checkTimeoutMs: 20 });
+    expect(await service.check()).toMatchObject({ state: 'error', message: 'The update server took too long to answer. Try again.' });
+    expect(service.getStatus().state).toBe('error'); // and a new check is allowed
+  });
+
+  it('reports an install that fails to start instead of silently doing nothing', async () => {
+    const { port, emit } = fakeUpdater({ check: async () => emit('update-available', { version: '2.0.0' }), download: async () => emit('update-downloaded', { version: '2.0.0' }) });
+    (port.quitAndInstall as ReturnType<typeof vi.fn>).mockImplementation(() => { throw new Error('boom'); });
+    const service = createUpdateService({ updater: port, currentVersion: '1.0.0', schedule: (run) => run() });
+    await service.check();
+    await service.download();
+    service.install();
+    expect(service.getStatus().state).toBe('error');
   });
 
   it('reports "none" when up to date, and a calm sentence when it fails', async () => {

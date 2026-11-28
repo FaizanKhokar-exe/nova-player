@@ -1,6 +1,6 @@
 # Nova Player 2 — Software Documentation
 
-Version 0.16.1 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
+Version 0.17.0 · for the owner / future contributors · written so we can sit down and decide **what to build next**.
 
 > Honesty box: the app has been built and tested on **Linux (automated tests, a virtual display, synthetic audio)**. It has **not been run on a real Windows machine by a person**, the installer is **unsigned**, and **timing/beat quality on real music has never been measured** — only on synthetic signals. Sections marked ⚠ say where that matters.
 
@@ -22,7 +22,7 @@ Design goals: premium look (Spotify layout + Apple-Music lyrics + Lark-style lyr
 | Playback | Play/pause, next/prev, seek, volume, repeat (off/all/one), shuffle, speed 0.5–2× (pitch kept), sleep timer (minutes / end of track) with optional gentle fade, track-to-track fade |
 | Audio | 10-band EQ + 10 presets, automatic headroom (preamp), master fade node |
 | Queue | Drawer: played / now / next, drag + arrows, remove, clear |
-| Lyrics | `.lrc` beside the song or attached; Now Playing panel; full-screen **Lyrics Mode** with beat-reactive particles/aurora; click a line to seek |
+| Lyrics | `.lrc` beside the song or attached; Now Playing panel; full-screen **Lyrics Mode** with particles born only on beats; smooth glide scroll + steady *Jump to now*; click a line to seek |
 | Lyric styles | Animation Apple / Karaoke · sung lines Dim / Fade away / Hide · align left/center · case normal/UPPER/lower/Small-caps/Capitalize · font default/serif/rounded/mono · beat intensity Off/Subtle/Normal/Strong · depth blur |
 | Lyric Studio | Find lyrics online (LRCLIB, consent) or paste; offline timing estimate; live editor (stamp with Enter, nudge, lock, audition, undo, shift all); "singing starts/ends here" markers; add / replace / remove lines; save `.lrc` next to the song (backup `.lrc.bak`) |
 | Visuals | Spectrum bars/wave/ring from real audio, Visualizer layout, particles, performance modes Auto/High/Balanced/Low |
@@ -31,7 +31,7 @@ Design goals: premium look (Spotify layout + Apple-Music lyrics + Lark-style lyr
 | Song info | Edit title/artist/album (stored beside the library, file untouched): Tidy up, Find the right name (online), Reset |
 | Equalizer | Also in the player bar (popover), same settings as Settings |
 | RTL lyrics | Urdu/Arabic/Persian/Hebrew lines align and wipe right-to-left automatically |
-| Updates | Settings → Updates: version, check, download, restart & update; automatic check once after launch (switchable); free via GitHub Releases |
+| Updates | Settings → Updates: version, check (45 s timeout), update size (installer size as upper bound before, real delta size during download), progress + speed, retry download, restart & update with an on-screen *Restarting…* overlay; automatic check once after launch (switchable); free via GitHub Releases |
 | Shortcuts | Customizable keys for 12 actions; fixed: arrows, digits, F11, `?`, Ctrl combos |
 | Desktop | Tray, media keys, notification on new track, remembered window, single instance, resume queue/position (paused) |
 
@@ -82,6 +82,8 @@ One shared animation loop; beat analyzer turns FFT bins into `bass/mid/treble/le
 
 ## 5. Settings reference
 
+Settings is two panes (v0.17.0): a section list (Appearance, Playback, Lyrics, Performance, Library, Shortcuts, Updates) and the chosen section; it becomes a tab strip below 900 px. Library holds Add folder / Scan / Watch / data tools; the sidebar no longer has them (Songs header has Add folder + Scan too). The last section is remembered for the session.
+
 Appearance: theme, colour source, **mood** · Wallpaper: enable, dim, blur · Playback: speed, EQ, track fade, gentle sleep timer · Lyrics: backdrop, depth blur, line animation, sung lines, align, case, font, beat intensity, online search consent · Performance mode · Shortcuts editor · Library folders.
 
 ## 6. Keyboard
@@ -124,6 +126,8 @@ Local only. Network: (1) lyrics search to `lrclib.net` (host-pinned, HTTPS, no r
 | Last.fm scrobbling | social | S–M | needs account/keys |
 
 ## 11. Version history (short)
+
+0.17.0 Smoother app (sliding sidebar indicator, staggered entrances, press states, Settings pane fade), sidebar without duplicate playlist list/Add/Scan (moved to Songs header + Settings → Library), Songs header (count + total time, Play, Shuffle, Add folder, Scan), Settings redesigned as two panes (Appearance · Playback · Lyrics · Performance · Library · Shortcuts · Updates; tabs when narrow), responsive down to ~640 px, beat-born particles (Aurora removed), custom smooth lyric scroll + steady Jump to now, stronger Tidy up rules, update size + retry + restart overlay.
 
 0.16.1 HUD reliability (a song ending / repeat-one no longer flashes Pause or Play; volume HUD in both directions and at the limits, also while the slider has focus), softer beat (pulse follows hit strength, slower release, gentler cover/glow), Lyric Studio: edit words in place (double-click / F2), duplicate, merge, shift-from-here, lock all, next-to-check, 0.75× speed. · 0.16 online updates (electron-updater + GitHub Releases), HUD no longer flashes “pause” when a song changes.
 

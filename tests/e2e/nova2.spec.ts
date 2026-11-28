@@ -290,10 +290,12 @@ test('settings: equalizer preset, speed and visualizer style apply to the live a
   await playRow(first.window, 'Alpha');
   await waitPlaying(first.window);
   await first.window.getByTestId('nav-settings').click();
+  await first.window.getByTestId('settings-tab-playback').click();
   await first.window.getByRole('button', { name: 'Bass boost' }).click();
   await expect(first.window.getByRole('switch', { name: 'Equalizer' })).toHaveAttribute('aria-checked', 'true');
   await expect(first.window.getByRole('button', { name: 'Bass boost' })).toHaveAttribute('aria-pressed', 'true');
   await first.window.getByRole('group', { name: 'Playback speed' }).getByRole('button', { name: '1.25×' }).click();
+  await first.window.getByTestId('settings-tab-performance').click();
   await first.window.getByRole('group', { name: 'Spectrum style' }).getByRole('button', { name: 'Wave' }).click();
   expect((await audioOf(first.window)).paused).toBe(false); // the graph changed under a playing song without stopping it
   await expect.poll(() => first.window.evaluate(() => (document.getElementById('nova-audio') as HTMLAudioElement).playbackRate)).toBe(1.25);
@@ -302,8 +304,10 @@ test('settings: equalizer preset, speed and visualizer style apply to the live a
 
   const second = await launchApp({ userDataDir: box.userData });
   await second.window.getByTestId('nav-settings').click();
+  await second.window.getByTestId('settings-tab-playback').click();
   await expect(second.window.getByRole('switch', { name: 'Equalizer' })).toHaveAttribute('aria-checked', 'true');
   await expect(second.window.getByRole('button', { name: 'Bass boost' })).toHaveAttribute('aria-pressed', 'true');
+  await second.window.getByTestId('settings-tab-performance').click();
   await expect(second.window.getByRole('group', { name: 'Spectrum style' }).getByRole('button', { name: 'Wave' })).toHaveAttribute('aria-pressed', 'true');
   await second.app.close();
 });
@@ -357,16 +361,23 @@ test('hovering an icon-only control shows its name (and shortcut) in a tooltip',
   await app.close();
 });
 
-test('sidebar: nothing overlaps (footer buttons vs the playlist list) in expanded and collapsed mode, at a short window height too', async () => {
+test('sidebar: no duplicate playlist list or Add/Scan buttons, footer never overlaps the nav, in expanded and collapsed mode, at a short window height too', async () => {
   const { app, window } = await openApp();
+  await expect(window.getByTestId('sidebar-playlists')).toHaveCount(0);
+  await expect(window.getByTestId('add-folder')).toHaveCount(0);
+  await expect(window.getByTestId('scan-all')).toHaveCount(0);
   for (const height of [820, 560]) {
     await window.setViewportSize({ width: 1360, height });
     const foot = await window.locator('.nx-side-foot').boundingBox();
-    const lists = await window.getByTestId('sidebar-playlists').boundingBox();
+    const last = await window.getByTestId('nav-playlists').boundingBox();
     expect(foot).not.toBeNull();
-    if (foot !== null && lists !== null) expect(overlaps(foot, lists)).toBe(false);
-    await expect(window.getByTestId('add-folder')).toBeVisible();
+    if (foot !== null && last !== null) expect(overlaps(foot, last)).toBe(false);
   }
+  // the accent bar sits on the active page
+  await window.getByTestId('nav-songs').click();
+  const bar = await window.locator('.nx-nav-bar').boundingBox();
+  const songs = await window.getByTestId('nav-songs').boundingBox();
+  expect(bar !== null && songs !== null && bar.y >= songs.y - 2 && bar.y + bar.height <= songs.y + songs.height + 2).toBe(true);
   await window.getByTestId('sidebar-toggle').click();
   await expect(window.getByTestId('app-shell')).toHaveAttribute('data-collapsed', 'true');
   const sizes = await window.locator('.nx-sidebar .nx-nav-item').evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return `${Math.round(r.width)}x${Math.round(r.height)}`; }));
@@ -675,6 +686,7 @@ test('Space is a shortcut everywhere: with a button focused it still only plays/
   expect(await window.getByTestId('main-scroll').count()).toBe(route);
   // remap play/pause to K in Settings
   await window.keyboard.press('Control+,');
+  await window.getByTestId('settings-tab-shortcuts').click();
   await window.getByTestId('shortcut-togglePlay').click();
   await window.keyboard.press('k');
   await expect(window.getByTestId('shortcut-togglePlay')).toHaveText('K');
@@ -690,6 +702,7 @@ test('Lyric style settings apply to the lyrics panel, and Lyric Studio keeps rep
   await rowFor(window, 'Alpha').locator('.nx-row-title').click();
   await waitPlaying(window);
   await window.keyboard.press('Control+,');
+  await window.getByTestId('settings-tab-lyrics').click();
   await window.getByRole('button', { name: 'CAPS', exact: true }).click();
   await window.getByRole('button', { name: 'Centre' }).click();
   await window.getByRole('button', { name: 'Karaoke' }).click();
@@ -709,6 +722,7 @@ test('volume HUD appears on a volume key, and Sung lines can be set to Hide', as
   await expect(window.getByTestId('hud-volume')).toBeVisible();
   await expect(window.getByTestId('hud-volume')).toContainText('Muted');
   await window.keyboard.press('Control+,');
+  await window.getByTestId('settings-tab-lyrics').click();
   await expect(window.getByRole('button', { name: 'Magnet' })).toHaveCount(0);
   await window.getByRole('button', { name: 'Hide', exact: true }).click();
   await window.getByRole('button', { name: 'Open Now Playing' }).first().click();
@@ -775,6 +789,7 @@ test('equalizer opens from the player bar, and a song name can be corrected and 
 test('settings: the Updates section shows the version; a development run reports that updates need the installed app', async () => {
   const { app, window } = await openApp();
   await window.getByTestId('nav-settings').click();
+  await window.getByTestId('settings-tab-updates').click();
   const status = window.getByTestId('update-status');
   await expect(status).toHaveAttribute('data-state', 'unsupported');
   await expect(window.getByRole('button', { name: 'Check for updates' })).toBeDisabled();
@@ -825,5 +840,70 @@ test('Lyric Studio: the words of a line can be edited in place (double-click / F
   await window.keyboard.press('Escape');
   await window.getByTestId('studio-discard').click();
   await expect(window.getByTestId('lyric-studio')).toHaveCount(0);
+  await app.close();
+});
+
+/* ---------------------------------- v0.17.0: Songs header, Settings panes, narrow windows ---------------------------------- */
+
+test('Songs page: header shows count + total time with Play, Shuffle, Add folder and Scan', async () => {
+  const { app, window } = await openApp();
+  await expect(window.getByTestId('songs-summary')).toContainText('7 songs');
+  await expect(window.getByTestId('songs-add-folder')).toBeVisible();
+  await expect(window.getByTestId('songs-scan')).toBeEnabled();
+  await window.getByTestId('hero-play').click();
+  await waitPlaying(window);
+  await app.close();
+});
+
+test('Settings: two panes - one section at a time, the list switches it, and it is remembered', async () => {
+  const { app, window } = await openApp();
+  await window.getByTestId('nav-settings').click();
+  await expect(window.getByTestId('settings-pane-appearance')).toBeVisible();
+  await expect(window.getByTestId('wallpaper-settings')).toBeVisible();
+  await expect(window.getByTestId('library-settings')).toHaveCount(0); // other sections are not rendered
+  for (const id of ['playback', 'lyrics', 'performance', 'library', 'shortcuts', 'updates']) {
+    await window.getByTestId(`settings-tab-${id}`).click();
+    await expect(window.getByTestId(`settings-pane-${id}`)).toBeVisible();
+  }
+  await window.getByTestId('settings-tab-library').click();
+  await expect(window.getByTestId('settings-add-folder')).toBeVisible();
+  await window.getByTestId('nav-songs').click();
+  await window.getByTestId('nav-settings').click();
+  await expect(window.getByTestId('settings-pane-library')).toBeVisible();
+  await app.close();
+});
+
+test('narrow window (640 px): no view scrolls sideways and Settings keeps every section reachable', async () => {
+  const { app, window } = await openApp();
+  await window.setViewportSize({ width: 640, height: 700 });
+  const overflowing = (): Promise<boolean> => window.evaluate(() => { const el = document.querySelector('[data-testid="main-scroll"]'); return el !== null && el.scrollWidth > el.clientWidth + 1; });
+  for (const view of ['nav-home', 'nav-songs', 'nav-albums', 'nav-artists', 'nav-playlists', 'nav-settings']) {
+    await window.getByTestId(view).click();
+    expect(await overflowing(), view).toBe(false);
+  }
+  for (const id of ['appearance', 'playback', 'lyrics', 'performance', 'library', 'shortcuts', 'updates']) {
+    await window.getByTestId(`settings-tab-${id}`).click();
+    await expect(window.getByTestId(`settings-pane-${id}`)).toBeVisible();
+    expect(await overflowing(), id).toBe(false);
+  }
+  expect(await window.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  await app.close();
+});
+
+test('Lyrics: "Jump to now" stays hidden while following, shows after scrolling away, and brings the current line back', async () => {
+  const lines = Array.from({ length: 40 }, (_, i) => `[00:${String(i).padStart(2, '0')}.00]line number ${i + 1} of the song`).join('\n');
+  fs.writeFileSync(path.join(box.music, 'Alpha.lrc'), lines);
+  const { app, window } = await openApp();
+  await playRow(window, 'Alpha');
+  await waitPlaying(window);
+  await window.getByTestId('player-lyrics').click();
+  await expect(window.getByTestId('lyrics-list')).toBeVisible({ timeout: 15_000 });
+  const jump = window.getByTestId('lyrics-jump');
+  await expect(jump).toHaveAttribute('data-show', 'false');
+  await window.getByTestId('lyrics-list').hover();
+  await window.mouse.wheel(0, 1600);
+  await expect(jump).toHaveAttribute('data-show', 'true', { timeout: 5_000 });
+  await jump.click();
+  await expect(jump).toHaveAttribute('data-show', 'false', { timeout: 5_000 });
   await app.close();
 });
